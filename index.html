@@ -130,22 +130,30 @@
 
     <!-- Modal -->
     <div id="modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
-        <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md border border-white/10 shadow-2xl">
+        <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-5">
                 <h2 class="text-lg font-bold">➕ Ajouter une adresse</h2>
                 <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 text-xl">✕</button>
             </div>
             <form onsubmit="handleAdd(event)" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Nom</label>
-                    <input type="text" id="input-nom" required placeholder="Ex: Bureau principal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Nom de la fréquence <span class="text-red-400">*</span></label>
+                    <input type="text" id="input-nom" required placeholder="Ex: FM 98.5" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                 </div>
                 <div class="relative">
-                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse <span class="text-slate-500">(suggestions auto)</span></label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse <span class="text-red-400">*</span> <span class="text-slate-500">(suggestions auto)</span></label>
                     <input type="text" id="input-addr" required placeholder="Tapez une adresse..." autocomplete="off" oninput="onAddrInput(this.value)" onkeydown="onAddrKey(event)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                     <div id="autocomplete" class="autocomplete-list hidden"></div>
                 </div>
                 <div id="coords-box" class="hidden text-xs text-green-400 bg-green-500/10 rounded-lg p-2">✓ Localisée: <span id="coords-text"></span></div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
+                    <textarea id="input-desc" placeholder="Ex: Site de transmission principal..." rows="2" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Lien URL</label>
+                    <input type="url" id="input-url" placeholder="https://..." class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                </div>
                 <button type="submit" id="btn-add" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold py-3 rounded-xl">➕ Ajouter</button>
             </form>
         </div>
@@ -272,7 +280,7 @@ async function geocode(addr){if(S.selSugg)return{lat:S.selSugg.lat,lng:S.selSugg
 
 // Map
 function initMap(){map=L.map('map',{center:[46.8,-71.2],zoom:7});L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);setTimeout(()=>map.invalidateSize(),100);}
-function updateMarkers(){Object.values(markers).forEach(m=>map.removeLayer(m));markers={};const f=getFiltered(),bounds=[];f.forEach(loc=>{const icon=L.divIcon({className:'',html:`<div class="marker-pin ${loc.enPanne?'panne':'ok'}"></div>`,iconSize:[24,24],iconAnchor:[12,12]});const m=L.marker([loc.lat,loc.lng],{icon}).addTo(map).bindPopup(`<b>${loc.nom}</b><br><small style="color:#94a3b8">${loc.adresse}</small><br><span style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;${loc.enPanne?'background:#ef4444':'background:#22c55e'};color:white">${loc.enPanne?'⚡ PANNE':'✓ OK'}</span>${loc.enPanne&&loc.panne?`<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;font-size:11px;color:#f87171">⚠️ ${loc.panne.cause}<br><span style="color:#94a3b8">${loc.panne.clients} clients</span></div>`:''}`);m.on('click',()=>selLoc(loc.id));markers[loc.id]=m;bounds.push([loc.lat,loc.lng]);});if(bounds.length)bounds.length===1?map.setView(bounds[0],12):map.fitBounds(bounds,{padding:[50,50]});}
+function updateMarkers(){Object.values(markers).forEach(m=>map.removeLayer(m));markers={};const f=getFiltered(),bounds=[];f.forEach(loc=>{const icon=L.divIcon({className:'',html:`<div class="marker-pin ${loc.enPanne?'panne':'ok'}"></div>`,iconSize:[24,24],iconAnchor:[12,12]});const descHtml=loc.description?`<div style="margin-top:6px;font-size:11px;color:#cbd5e1">${loc.description}</div>`:'';const urlHtml=loc.url?`<a href="${loc.url}" target="_blank" style="display:inline-block;margin-top:8px;color:#60a5fa;font-size:11px;text-decoration:underline">🔗 Voir le lien</a>`:'';const m=L.marker([loc.lat,loc.lng],{icon}).addTo(map).bindPopup(`<b>${loc.nom}</b><br><small style="color:#94a3b8">${loc.adresse}</small>${descHtml}<br><span style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;${loc.enPanne?'background:#ef4444':'background:#22c55e'};color:white">${loc.enPanne?'⚡ PANNE':'✓ OK'}</span>${loc.enPanne&&loc.panne?`<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;font-size:11px;color:#f87171">⚠️ ${loc.panne.cause}<br><span style="color:#94a3b8">${loc.panne.clients} clients</span></div>`:''}${urlHtml}`);m.on('click',()=>selLoc(loc.id));markers[loc.id]=m;bounds.push([loc.lat,loc.lng]);});if(bounds.length)bounds.length===1?map.setView(bounds[0],12):map.fitBounds(bounds,{padding:[50,50]});}
 
 // UI
 function getFiltered(){return S.locs.filter(l=>(l.nom.toLowerCase().includes(S.search.toLowerCase())||l.adresse.toLowerCase().includes(S.search.toLowerCase()))&&(S.filter==='tous'||(S.filter==='panne'&&l.enPanne)||(S.filter==='normal'&&!l.enPanne)));}
@@ -285,11 +293,11 @@ function selLoc(id){S.selId=S.selId===id?null:id;updateUI();if(S.selId&&markers[
 function setFilter(f){S.filter=f;document.querySelectorAll('#filter-btns button').forEach(b=>{b.className=`flex-1 py-2 rounded-lg text-xs font-medium ${b.dataset.f===f?'bg-blue-500/20 text-blue-400 border border-blue-500/30':'bg-white/5 text-slate-400'}`});updateUI();updateMarkers();}
 function handleSearch(v){S.search=v;updateUI();updateMarkers();}
 function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('modal').classList.add('flex');document.getElementById('input-nom').focus();S.selSugg=null;document.getElementById('coords-box').classList.add('hidden');}
-function closeModal(){document.getElementById('modal').classList.add('hidden');document.getElementById('modal').classList.remove('flex');document.getElementById('input-nom').value='';document.getElementById('input-addr').value='';hideAuto();S.selSugg=null;document.getElementById('coords-box').classList.add('hidden');}
+function closeModal(){document.getElementById('modal').classList.add('hidden');document.getElementById('modal').classList.remove('flex');document.getElementById('input-nom').value='';document.getElementById('input-addr').value='';document.getElementById('input-desc').value='';document.getElementById('input-url').value='';hideAuto();S.selSugg=null;document.getElementById('coords-box').classList.add('hidden');}
 function delLoc(id){if(confirm('Supprimer?')){S.locs=S.locs.filter(l=>l.id!==id);if(S.selId===id)S.selId=null;save();updateUI();updateMarkers();}}
-async function handleAdd(e){e.preventDefault();const nom=document.getElementById('input-nom').value.trim(),addr=document.getElementById('input-addr').value.trim(),btn=document.getElementById('btn-add');btn.disabled=true;btn.textContent='⏳ Localisation...';try{const g=await geocode(addr);S.locs.push({id:Date.now(),nom,adresse:addr,lat:g.lat,lng:g.lng,enPanne:false,panne:null});updateStatus();closeModal();}catch(err){alert("Erreur: "+err.message);}finally{btn.disabled=false;btn.textContent='➕ Ajouter';}}
+async function handleAdd(e){e.preventDefault();const nom=document.getElementById('input-nom').value.trim(),addr=document.getElementById('input-addr').value.trim(),desc=document.getElementById('input-desc').value.trim(),url=document.getElementById('input-url').value.trim(),btn=document.getElementById('btn-add');btn.disabled=true;btn.textContent='⏳ Localisation...';try{const g=await geocode(addr);S.locs.push({id:Date.now(),nom,adresse:addr,description:desc,url:url,lat:g.lat,lng:g.lng,enPanne:false,panne:null});updateStatus();closeModal();}catch(err){alert("Erreur: "+err.message);}finally{btn.disabled=false;btn.textContent='➕ Ajouter';}}
 async function refreshData(){if(!S.loading)await fetchHQ();}
-function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({date:new Date().toISOString(),locations:S.locs.map(l=>({nom:l.nom,adresse:l.adresse,lat:l.lat,lng:l.lng}))},null,2)],{type:'application/json'}));a.download=`hydro-monitor-${new Date().toISOString().split('T')[0]}.json`;a.click();}
+function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({date:new Date().toISOString(),locations:S.locs.map(l=>({nom:l.nom,adresse:l.adresse,description:l.description||'',url:l.url||'',lat:l.lat,lng:l.lng}))},null,2)],{type:'application/json'}));a.download=`hydro-monitor-${new Date().toISOString().split('T')[0]}.json`;a.click();}
 function importData(file){const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.locations){S.locs=[...S.locs,...d.locations.map((l,i)=>({id:Date.now()+i,...l,enPanne:false,panne:null}))];updateStatus();alert(`${d.locations.length} adresse(s) importée(s)!`);}}catch(err){alert("Erreur: "+err.message);}};r.readAsText(file);}
 
 // Init
