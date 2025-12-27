@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydro-Québec Monitor | CAUCA</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-ping-slow { animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+        .slide-in { animation: slideIn 0.3s ease-out forwards; }
+        .shake { animation: shake 0.3s ease-out; }
+        .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
+    
+    <!-- ============================================ -->
+    <!-- ÉCRAN DE CONNEXION -->
+    <!-- ============================================ -->
+    <div id="login-screen" class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="glass p-8 rounded-3xl border border-white/10 w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30">
+                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                    Hydro-Québec Monitor
+                </h1>
+                <p class="text-slate-400 mt-2">Accès réservé - CAUCA</p>
+            </div>
+            
+            <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Mot de passe</label>
+                    <input type="password" id="password-input" required
+                           placeholder="Entrez le mot de passe"
+                           class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                <div id="error-message" class="hidden text-red-400 text-sm text-center py-2 bg-red-500/10 rounded-lg">
+                    Mot de passe incorrect
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    Accéder
+                </button>
+            </form>
+            
+            <p class="text-xs text-slate-500 text-center mt-6">
+                Contactez votre administrateur pour obtenir le mot de passe
+            </p>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- APPLICATION PRINCIPALE (cachée par défaut) -->
+    <!-- ============================================ -->
+    <div id="app" class="hidden"></div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const CONFIG = {
+            // ⚠️ MODIFIEZ CE MOT DE PASSE ⚠️
+            // Utilisez un mot de passe fort et partagez-le uniquement avec vos collègues
+            password: "CAUCA2025!",
+            
+            // Nom de l'organisation
+            orgName: "CAUCA",
+            
+            // Clé de stockage
+            storageKey: "hydro-quebec-monitor-cauca-v2",
+            
+            // Clé de session (pour rester connecté)
+            sessionKey: "hqm-session",
+            
+            // Durée de session (en heures)
+            sessionDuration: 8,
+            
+            // Rafraîchissement auto (minutes)
+            refreshInterval: 15,
+            
+            // Seuil de distance (km)
+            seuilDistanceKm: 2.0,
+            
+            // URL API Hydro-Québec
+            apiBaseUrl: "https://pannes.hydroquebec.com/pannes/donnees/v3_0"
+        };
+
+        // ============================================
+        // AUTHENTIFICATION SIMPLE
+        // ============================================
+        function checkSession() {
+            try {
+                const session = localStorage.getItem(CONFIG.sessionKey);
+                if (session) {
+                    const data = JSON.parse(session);
+                    const expiry = new Date(data.expiry);
+                    if (expiry > new Date()) {
+                        return true;
+                    }
+                }
+            } catch (e) {}
+            return false;
+        }
+
+        function createSession() {
+            const expiry = new Date();
+            expiry.setHours(expiry.getHours() + CONFIG.sessionDuration);
+            localStorage.setItem(CONFIG.sessionKey, JSON.stringify({
+                authenticated: true,
+                expiry: expiry.toISOString()
+            }));
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const password = document.getElementById('password-input').value;
+            const errorDiv = document.getElementById('error-message');
+            const form = document.getElementById('login-form');
+            
+            if (password === CONFIG.password) {
+                createSession();
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                initApp();
+            } else {
+                errorDiv.classList.remove('hidden');
+                form.classList.add('shake');
+                setTimeout(() => form.classList.remove('shake'), 300);
+                document.getElementById('password-input').value = '';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem(CONFIG.sessionKey);
+            window.location.reload();
+        }
+
+        // ============================================
+        // ÉTAT GLOBAL
+        // ============================================
+        let state = {
+            locations: [],
+            pannesHQ: [],
+            selectedId: null,
+            filtreStatut: 'tous',
+            recherche: '',
+            showModal: false,
+            isLoading: false,
+            lastUpdate: null,
+            error: null
+        };
+
+        // ============================================
+        // STOCKAGE LOCAL
+        // ============================================
+        function loadSavedData() {
+            try {
+                const saved = localStorage.getItem(CONFIG.storageKey);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    state.locations = data.locations || [];
+                }
+            } catch (e) {
+                console.error("Erreur chargement:", e);
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(CONFIG.storageKey, JSON.stringify({
+                    locations: state.locations,
+                    lastSaved: new Date().toISOString()
+                }));
+            } catch (e) {
+                console.error("Erreur sauvegarde:", e);
+            }
+        }
+
+        // ============================================
+        // API HYDRO-QUÉBEC
+        // ============================================
+        async function fetchPannesHQ() {
+            state.isLoading = true;
+            state.error = null;
+            render();
+
+            try {
+                const versionRes = await fetch(`${CONFIG.apiBaseUrl}/bisversion.json`);
+                if (!versionRes.ok) throw new Error("API indisponible");
+                const versionData = await versionRes.json();
+                const version = versionData.version || Object.values(versionData)[0];
+
+                const markersRes = await fetch(`${CONFIG.apiBaseUrl}/bismarkers${version}.json`);
+                if (!markersRes.ok) throw new Error("Données pannes indisponibles");
+                const markersData = await markersRes.json();
+
+                state.pannesHQ = Array.isArray(markersData) ? markersData : (markersData.markers || []);
+                state.lastUpdate = new Date();
+
+                updateLocationsStatus();
+                return true;
+
+            } catch (e) {
+                console.error("Erreur API HQ:", e);
+                state.error = e.message;
+                return false;
+            } finally {
+                state.isLoading = false;
+                render();
+            }
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        function updateLocationsStatus() {
+            state.locations = state.locations.map(loc => {
+                let enPanne = false;
+                let panneInfo = null;
+                let distanceMin = Infinity;
+
+                for (const panne of state.pannesHQ) {
+                    const panneLat = parseFloat(panne.lat || panne.latitude);
+                    const panneLng = parseFloat(panne.lng || panne.lon || panne.longitude);
+                    if (isNaN(panneLat) || isNaN(panneLng)) continue;
+
+                    const distance = calculateDistance(loc.lat, loc.lng, panneLat, panneLng);
+                    if (distance < distanceMin) {
+                        distanceMin = distance;
+                        if (distance <= CONFIG.seuilDistanceKm) {
+                            enPanne = true;
+                            panneInfo = {
+                                cause: panne.cause || panne.causeLib || 'Non spécifiée',
+                                debut: panne.dateDebut || panne.debut || 'Inconnue',
+                                retablissement: panne.dateRetablissementPrevue || panne.eta || null,
+                                clientsAffectes: parseInt(panne.nbClient || panne.clients || 0),
+                                distance: distance.toFixed(2)
+                            };
+                        }
+                    }
+                }
+
+                return { ...loc, enPanne, panne: panneInfo, distancePanneProche: distanceMin === Infinity ? null : distanceMin.toFixed(2) };
+            });
+            saveData();
+        }
+
+        async function geocodeAddress(adresse) {
+            const query = encodeURIComponent(`${adresse}, Québec, Canada`);
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=ca`, {
+                headers: { 'User-Agent': 'HydroQuebecMonitor/1.0' }
+            });
+            const data = await res.json();
+            if (data && data.length > 0) {
+                return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            }
+            throw new Error("Adresse non trouvée");
+        }
+
+        // ============================================
+        // EXPORT / IMPORT
+        // ============================================
+        function exportData() {
+            const data = {
+                exportDate: new Date().toISOString(),
+                organization: CONFIG.orgName,
+                locations: state.locations.map(l => ({ nom: l.nom, adresse: l.adresse, lat: l.lat, lng: l.lng }))
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hydro-monitor-export-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.locations && Array.isArray(data.locations)) {
+                        const newLocations = data.locations.map((l, i) => ({
+                            id: Date.now() + i,
+                            nom: l.nom,
+                            adresse: l.adresse,
+                            lat: l.lat,
+                            lng: l.lng,
+                            enPanne: false,
+                            panne: null
+                        }));
+                        state.locations = [...state.locations, ...newLocations];
+                        updateLocationsStatus();
+                        render();
+                        alert(`${newLocations.length} adresse(s) importée(s)!`);
+                    }
+                } catch (err) {
+                    alert("Erreur: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ============================================
+        // RENDU UI
+        // ============================================
+        function render() {
+            const app = document.getElementById('app');
+            
+            const filteredLocations = state.locations.filter(loc => {
+                const matchRecherche = loc.nom.toLowerCase().includes(state.recherche.toLowerCase()) ||
+                                      loc.adresse.toLowerCase().includes(state.recherche.toLowerCase());
+                const matchStatut = state.filtreStatut === 'tous' ||
+                                   (state.filtreStatut === 'panne' && loc.enPanne) ||
+                                   (state.filtreStatut === 'normal' && !loc.enPanne);
+                return matchRecherche && matchStatut;
+            });
+
+            const stats = {
+                total: state.locations.length,
+                enPanne: state.locations.filter(l => l.enPanne).length,
+                normal: state.locations.filter(l => !l.enPanne).length
+            };
+
+            app.innerHTML = `
+                <!-- Header -->
+                <header class="border-b border-white/10 glass sticky top-0 z-40">
+                    <div class="max-w-7xl mx-auto px-4 py-3">
+                        <div class="flex items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl shadow-lg shadow-blue-500/20">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                </div>
+                                <div class="hidden sm:block">
+                                    <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
+                                    <p class="text-xs text-slate-500">${CONFIG.orgName}</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2 sm:gap-3">
+                                ${state.error ? `<div class="hidden sm:flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 px-3 py-1.5 rounded-lg">${state.error}</div>` : ''}
+                                
+                                <div class="text-xs text-slate-500 hidden md:block">
+                                    ${state.lastUpdate ? state.lastUpdate.toLocaleTimeString('fr-CA') : '--:--'}
+                                </div>
+                                
+                                <button onclick="refreshData()" class="p-2 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm transition-all flex items-center gap-2 ${state.isLoading ? 'opacity-50' : ''}" ${state.isLoading ? 'disabled' : ''}>
+                                    <div class="w-2 h-2 ${state.lastUpdate && !state.error ? 'bg-green-400' : 'bg-amber-400'} rounded-full ${state.isLoading ? 'animate-ping' : 'animate-pulse'}"></div>
+                                    <span class="hidden sm:inline">${state.isLoading ? 'Chargement...' : 'Actualiser'}</span>
+                                </button>
+
+                                <!-- Menu -->
+                                <div class="relative group">
+                                    <button class="flex items-center gap-2 p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                        <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div>
+                                    </button>
+                                    <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        <div class="p-3 border-b border-white/10">
+                                            <p class="font-medium text-white">${CONFIG.orgName}</p>
+                                            <p class="text-xs text-slate-500">Utilisateur connecté</p>
+                                        </div>
+                                        <div class="p-2">
+                                            <button onclick="exportData()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                                Exporter
+                                            </button>
+                                            <label class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg cursor-pointer">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                                Importer
+                                                <input type="file" accept=".json" onchange="importData(this.files[0])" class="hidden">
+                                            </label>
+                                            <hr class="my-2 border-white/10">
+                                            <button onclick="logout()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                                                Déconnexion
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Stats -->
+                <div class="bg-black/20 border-b border-white/5">
+                    <div class="max-w-7xl mx-auto px-4 py-3">
+                        <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                                ${stats.total} adresses
+                            </div>
+                            <div class="flex items-center gap-2 text-green-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                ${stats.normal} OK
+                            </div>
+                            <div class="flex items-center gap-2 text-red-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                ${stats.enPanne} en panne
+                            </div>
+                            ${state.pannesHQ.length > 0 ? `<div class="text-slate-500 ml-auto text-xs">${state.pannesHQ.length} pannes au Québec</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main -->
+                <div class="max-w-7xl mx-auto px-4 py-4 sm:py-6">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6" style="min-height: calc(100vh - 200px);">
+                        
+                        <!-- Liste -->
+                        <div class="lg:col-span-1 flex flex-col glass rounded-2xl border border-white/10 overflow-hidden order-2 lg:order-1">
+                            <div class="p-3 sm:p-4 border-b border-white/10 space-y-3">
+                                <div class="relative">
+                                    <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                    <input type="text" value="${state.recherche}" oninput="updateRecherche(this.value)" placeholder="Rechercher..." class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                                </div>
+                                <div class="flex gap-2">
+                                    ${['tous', 'panne', 'normal'].map(f => `
+                                        <button onclick="setFiltre('${f}')" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${state.filtreStatut === f ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}">
+                                            ${f === 'tous' ? '📍' : f === 'panne' ? '⚡' : '✅'}
+                                            <span class="hidden sm:inline">${f === 'tous' ? 'Tous' : f === 'panne' ? 'Panne' : 'Normal'}</span>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3" style="max-height: 50vh;">
+                                ${filteredLocations.length === 0 ? `
+                                    <div class="text-center py-8 text-slate-500">
+                                        <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                                        <p>${state.locations.length === 0 ? 'Ajoutez votre première adresse' : 'Aucun résultat'}</p>
+                                    </div>
+                                ` : filteredLocations.map(loc => renderLocationCard(loc)).join('')}
+                            </div>
+
+                            <div class="p-3 sm:p-4 border-t border-white/10">
+                                <button onclick="openModal()" class="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 text-blue-400 font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                    Ajouter une adresse
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Carte -->
+                        <div class="lg:col-span-2 glass rounded-2xl border border-white/10 overflow-hidden relative order-1 lg:order-2" style="min-height: 300px; height: 40vh;">
+                            ${renderMap(filteredLocations)}
+                        </div>
+                    </div>
+                </div>
+
+                ${state.showModal ? renderModal() : ''}
+            `;
+        }
+
+        function renderLocationCard(loc) {
+            const isSelected = state.selectedId === loc.id;
+            return `
+                <div onclick="selectLocation(${loc.id})" class="relative p-3 sm:p-4 rounded-xl cursor-pointer transition-all duration-200 group ${isSelected ? 'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400' : 'bg-white/5 border border-white/10 hover:bg-white/10'} ${loc.enPanne ? 'ring-2 ring-red-500/50' : ''}">
+                    <div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${loc.enPanne ? 'bg-red-500 text-white animate-pulse-slow' : 'bg-green-500/80 text-white'}">
+                        ${loc.enPanne ? '⚡ PANNE' : '✓ OK'}
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="p-2 rounded-lg shrink-0 ${loc.enPanne ? 'bg-red-500/20' : 'bg-green-500/20'}">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 ${loc.enPanne ? 'text-red-400' : 'text-green-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-white truncate text-sm sm:text-base">${loc.nom}</h3>
+                            <p class="text-xs sm:text-sm text-slate-400 truncate">${loc.adresse}</p>
+                            ${loc.enPanne && loc.panne ? `
+                                <div class="mt-2 p-2 bg-red-500/10 rounded-lg border border-red-500/20 text-xs">
+                                    <div class="text-red-400 font-medium">${loc.panne.cause}</div>
+                                    <div class="text-slate-400">${loc.panne.clientsAffectes} clients</div>
+                                    ${loc.panne.retablissement ? `<div class="text-amber-400 mt-1">⏱ ${loc.panne.retablissement}</div>` : ''}
+                                </div>
+                            ` : loc.distancePanneProche ? `<div class="mt-1 text-xs text-slate-500">Panne la plus proche: ${loc.distancePanneProche} km</div>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteLocation(${loc.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                        <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderMap(locations) {
+            const bounds = { minLat: 45.0, maxLat: 48.5, minLng: -79.5, maxLng: -64.0 };
+            const toPixel = (lat, lng) => ({
+                x: ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100,
+                y: ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100
+            });
+
+            return `
+                <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
+                    <defs><pattern id="grid" width="8%" height="10%" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(96,165,250,0.08)" stroke-width="0.5"/></pattern></defs>
+                    <rect width="100%" height="100%" fill="url(#grid)"/>
+                    <path d="M 15% 85% Q 25% 70% 30% 55% Q 40% 40% 50% 30% Q 60% 25% 75% 28% Q 85% 35% 88% 50% Q 85% 65% 75% 75% Q 60% 85% 45% 82% Q 30% 80% 15% 85% Z" fill="rgba(59,130,246,0.06)" stroke="rgba(59,130,246,0.2)" stroke-width="1.5"/>
+                    ${locations.map(loc => {
+                        const pos = toPixel(loc.lat, loc.lng);
+                        const isSelected = state.selectedId === loc.id;
+                        return `
+                            <g onclick="selectLocation(${loc.id})" class="cursor-pointer">
+                                ${loc.enPanne ? `<circle cx="${pos.x}%" cy="${pos.y}%" r="18" fill="none" stroke="#ef4444" stroke-width="1.5" opacity="0.4" class="animate-ping-slow"/><circle cx="${pos.x}%" cy="${pos.y}%" r="12" fill="rgba(239,68,68,0.15)"/>` : ''}
+                                <circle cx="${pos.x}%" cy="${pos.y}%" r="${isSelected ? 10 : 7}" fill="${loc.enPanne ? '#ef4444' : '#22c55e'}" stroke="${isSelected ? '#fff' : 'rgba(255,255,255,0.4)'}" stroke-width="${isSelected ? 2.5 : 1.5}"/>
+                                ${isSelected ? `<rect x="${pos.x - 10}%" y="${pos.y - 9}%" width="20%" height="5%" rx="4" fill="rgba(0,0,0,0.85)"/><text x="${pos.x}%" y="${pos.y - 5.5}%" text-anchor="middle" font-size="10" fill="white">${loc.nom.substring(0, 22)}</text>` : ''}
+                            </g>
+                        `;
+                    }).join('')}
+                </svg>
+                <div class="absolute bottom-3 left-3 glass rounded-lg p-2.5 text-xs border border-white/10">
+                    <div class="flex items-center gap-2 mb-1.5"><div class="w-2.5 h-2.5 rounded-full bg-green-500"></div><span class="text-green-400">Normal</span></div>
+                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div><span class="text-red-400">En panne</span></div>
+                </div>
+            `;
+        }
+
+        function renderModal() {
+            return `
+                <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
+                    <div class="bg-slate-800 rounded-2xl p-5 sm:p-6 w-full max-w-md border border-white/10 shadow-2xl slide-in" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-between mb-5">
+                            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                Ajouter une adresse
+                            </h2>
+                            <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg"><svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                        </div>
+                        <form onsubmit="handleAddLocation(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-1.5">Nom</label>
+                                <input type="text" id="input-nom" required placeholder="Ex: Bureau principal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse</label>
+                                <input type="text" id="input-adresse" required placeholder="Ex: 123 rue Example, Montréal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                            </div>
+                            <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                Ajouter
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // ACTIONS
+        // ============================================
+        function selectLocation(id) { state.selectedId = state.selectedId === id ? null : id; render(); }
+        function setFiltre(f) { state.filtreStatut = f; render(); }
+        function updateRecherche(v) { state.recherche = v; render(); }
+        function openModal() { state.showModal = true; render(); }
+        function closeModal() { state.showModal = false; render(); }
+
+        function deleteLocation(id) {
+            if (confirm('Supprimer cette adresse?')) {
+                state.locations = state.locations.filter(l => l.id !== id);
+                if (state.selectedId === id) state.selectedId = null;
+                saveData();
+                render();
+            }
+        }
+
+        async function handleAddLocation(e) {
+            e.preventDefault();
+            const nom = document.getElementById('input-nom').value.trim();
+            const adresse = document.getElementById('input-adresse').value.trim();
+            const btn = document.getElementById('btn-submit');
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Géocodage...';
+
+            try {
+                const geo = await geocodeAddress(adresse);
+                state.locations.push({ id: Date.now(), nom, adresse, lat: geo.lat, lng: geo.lng, enPanne: false, panne: null });
+                updateLocationsStatus();
+                closeModal();
+            } catch (err) {
+                alert("Erreur: " + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Ajouter';
+            }
+        }
+
+        async function refreshData() {
+            if (state.isLoading) return;
+            await fetchPannesHQ();
+        }
+
+        // ============================================
+        // INITIALISATION
+        // ============================================
+        async function initApp() {
+            loadSavedData();
+            render();
+            await refreshData();
+            setInterval(refreshData, CONFIG.refreshInterval * 60 * 1000);
+        }
+
+        // Vérifier la session au chargement
+        if (checkSession()) {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            initApp();
+        }
+    </script>
+</body>
+</html>
