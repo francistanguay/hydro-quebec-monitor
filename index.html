@@ -190,10 +190,12 @@ const PROXIES=[
     url=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
 async function fetchP(url){
+    // Ajouter un timestamp pour éviter le cache
+    const urlNoCache = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
     for(const makeProxy of PROXIES){
         try{
-            const proxyUrl=makeProxy(url);
-            const r=await fetch(proxyUrl);
+            const proxyUrl=makeProxy(urlNoCache);
+            const r=await fetch(proxyUrl,{cache:'no-store'});
             if(r.ok){
                 const text=await r.text();
                 if(text && text.length>0 && !text.includes('error'))return text;
