@@ -26,6 +26,9 @@
         .leaflet-popup-tip{background:#1e293b}
         .leaflet-pane{z-index:400!important}
         #modal,#login-screen{z-index:99999!important}
+        .leaflet-top,.leaflet-bottom,.leaflet-control{z-index:500!important}
+        header{z-index:1000!important;position:relative}
+        .dropdown-menu{z-index:9999!important}
         .autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-top:4px;max-height:200px;overflow-y:auto;z-index:1000}
         .autocomplete-item{padding:10px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px}
         .autocomplete-item:hover,.autocomplete-item.active{background:rgba(59,130,246,0.2)}
@@ -56,7 +59,7 @@
 
     <!-- App -->
     <div id="app" class="hidden">
-        <header class="border-b border-white/10 glass sticky top-0 z-50">
+        <header class="border-b border-white/10 glass sticky top-0" style="z-index:9000;position:relative">
             <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl"><svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
@@ -67,9 +70,9 @@
                     <span class="text-xs text-slate-500 hidden md:block" id="last-update">--:--</span>
                     <button onclick="toggleZones()" id="zones-btn" class="p-2 sm:px-3 sm:py-2 bg-orange-500/20 border border-orange-500/30 rounded-xl text-sm text-orange-400">🔥 <span class="hidden sm:inline">Zones HQ</span></button>
                     <button onclick="refreshData()" id="refresh-btn" class="p-2 sm:px-4 sm:py-2 bg-white/5 border border-white/10 rounded-xl text-sm flex items-center gap-2"><div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse" id="status-dot"></div><span class="hidden sm:inline" id="refresh-text">Actualiser</span></button>
-                    <div class="relative group" style="z-index:10000">
+                    <div class="relative group">
                         <button class="p-2 hover:bg-white/10 rounded-xl"><div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div></button>
-                        <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible" style="z-index:10001">
+                        <div class="dropdown-menu absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible">
                             <div class="p-3 border-b border-white/10"><p class="font-medium" id="menu-org"></p><p class="text-xs text-slate-500">Connecté</p></div>
                             <div class="p-2">
                                 <button onclick="exportData()" class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
