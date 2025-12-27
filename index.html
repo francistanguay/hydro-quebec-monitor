@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
+    <!-- CONFIGURATION EXTERNE - Modifiez config.js pour vos adresses -->
+    <script src="config.js"></script>
+    
     <style>
         * { font-family: 'Inter', sans-serif; }
         .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
@@ -24,24 +27,26 @@
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
         
-        /* Leaflet custom styles */
+        /* Leaflet */
         .leaflet-container { background: #1e293b; }
-        .custom-marker { display: flex; align-items: center; justify-content: center; }
-        .marker-pin { width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+        .marker-pin { width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4); cursor: pointer; }
         .marker-pin.ok { background: #22c55e; }
         .marker-pin.panne { background: #ef4444; animation: pulse 1.5s infinite; }
         .leaflet-popup-content-wrapper { background: #1e293b; color: white; border-radius: 12px; }
         .leaflet-popup-tip { background: #1e293b; }
         .leaflet-popup-content { margin: 12px 16px; }
         
-        /* Dark mode tiles */
-        .leaflet-tile-pane { filter: brightness(0.8) contrast(1.1) saturate(0.8); }
+        /* Z-INDEX FIX */
+        .leaflet-pane { z-index: 400 !important; }
+        .leaflet-top, .leaflet-bottom { z-index: 500 !important; }
+        #modal { z-index: 99999 !important; }
+        #login-screen { z-index: 100000 !important; }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
     
     <!-- ÉCRAN DE CONNEXION -->
-    <div id="login-screen" class="fixed inset-0 flex items-center justify-center p-4 z-50">
+    <div id="login-screen" class="fixed inset-0 flex items-center justify-center p-4">
         <div class="glass p-8 rounded-3xl border border-white/10 w-full max-w-md">
             <div class="text-center mb-8">
                 <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30">
@@ -50,7 +55,7 @@
                     </svg>
                 </div>
                 <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
-                <p class="text-slate-400 mt-2">Accès réservé - CAUCA</p>
+                <p class="text-slate-400 mt-2" id="login-org">Accès réservé</p>
             </div>
             
             <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
@@ -59,17 +64,14 @@
                     <input type="password" id="password-input" required placeholder="Entrez le mot de passe" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                 </div>
                 <div id="error-message" class="hidden text-red-400 text-sm text-center py-2 bg-red-500/10 rounded-lg">Mot de passe incorrect</div>
-                <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                    🔐 Accéder
-                </button>
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-xl transition-all">🔐 Accéder</button>
             </form>
         </div>
     </div>
 
     <!-- APPLICATION -->
     <div id="app" class="hidden">
-        <!-- Header -->
-        <header class="border-b border-white/10 glass sticky top-0 z-40">
+        <header class="border-b border-white/10 glass sticky top-0 z-50">
             <div class="max-w-7xl mx-auto px-4 py-3">
                 <div class="flex items-center justify-between gap-4">
                     <div class="flex items-center gap-3">
@@ -78,31 +80,29 @@
                         </div>
                         <div class="hidden sm:block">
                             <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
-                            <p class="text-xs text-slate-500" id="org-name">CAUCA</p>
+                            <p class="text-xs text-slate-500" id="org-name">Organisation</p>
                         </div>
                     </div>
-
                     <div class="flex items-center gap-2 sm:gap-3">
-                        <div id="error-banner" class="hidden sm:flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 px-3 py-1.5 rounded-lg"></div>
+                        <div id="error-banner" class="hidden items-center gap-2 text-amber-400 text-xs bg-amber-500/10 px-3 py-1.5 rounded-lg"></div>
                         <div class="text-xs text-slate-500 hidden md:block" id="last-update">--:--</div>
-                        
                         <button onclick="refreshData()" id="refresh-btn" class="p-2 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm transition-all flex items-center gap-2">
                             <div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse" id="status-dot"></div>
                             <span class="hidden sm:inline" id="refresh-text">Actualiser</span>
                         </button>
-
                         <div class="relative group">
                             <button class="flex items-center gap-2 p-2 hover:bg-white/10 rounded-xl">
                                 <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div>
                             </button>
-                            <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                            <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[9998]">
                                 <div class="p-3 border-b border-white/10">
-                                    <p class="font-medium text-white" id="menu-org">CAUCA</p>
+                                    <p class="font-medium text-white" id="menu-org">Organisation</p>
                                     <p class="text-xs text-slate-500">Connecté</p>
                                 </div>
                                 <div class="p-2">
                                     <button onclick="exportData()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
                                     <label class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg cursor-pointer">📥 Importer<input type="file" accept=".json" onchange="importData(this.files[0])" class="hidden"></label>
+                                    <button onclick="resetToDefault()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">🔄 Charger config.js</button>
                                     <hr class="my-2 border-white/10">
                                     <button onclick="logout()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg">🚪 Déconnexion</button>
                                 </div>
@@ -113,7 +113,6 @@
             </div>
         </header>
 
-        <!-- Stats -->
         <div class="bg-black/20 border-b border-white/5">
             <div class="max-w-7xl mx-auto px-4 py-3">
                 <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
@@ -125,34 +124,25 @@
             </div>
         </div>
 
-        <!-- Main -->
         <div class="max-w-7xl mx-auto px-4 py-4 sm:py-6">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6" style="min-height: calc(100vh - 200px);">
-                
-                <!-- Liste -->
-                <div class="lg:col-span-1 flex flex-col glass rounded-2xl border border-white/10 overflow-hidden order-2 lg:order-1">
+                <div class="lg:col-span-1 flex flex-col glass rounded-2xl border border-white/10 overflow-hidden order-2 lg:order-1 relative z-10">
                     <div class="p-3 sm:p-4 border-b border-white/10 space-y-3">
                         <div class="relative">
                             <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="Rechercher..." class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                         </div>
                         <div class="flex gap-2" id="filter-buttons">
-                            <button onclick="setFiltre('tous')" data-filter="tous" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-blue-500/20 text-blue-400 border border-blue-500/30">📍 <span class="hidden sm:inline">Tous</span></button>
-                            <button onclick="setFiltre('panne')" data-filter="panne" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-white/5 text-slate-400 hover:bg-white/10">⚡ <span class="hidden sm:inline">Panne</span></button>
-                            <button onclick="setFiltre('normal')" data-filter="normal" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-white/5 text-slate-400 hover:bg-white/10">✅ <span class="hidden sm:inline">Normal</span></button>
+                            <button onclick="setFiltre('tous')" data-filter="tous" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">📍 <span class="hidden sm:inline">Tous</span></button>
+                            <button onclick="setFiltre('panne')" data-filter="panne" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 hover:bg-white/10">⚡ <span class="hidden sm:inline">Panne</span></button>
+                            <button onclick="setFiltre('normal')" data-filter="normal" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-slate-400 hover:bg-white/10">✅ <span class="hidden sm:inline">Normal</span></button>
                         </div>
                     </div>
-
                     <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3" id="locations-list" style="max-height: 50vh;"></div>
-
                     <div class="p-3 sm:p-4 border-t border-white/10">
-                        <button onclick="openModal()" class="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 text-blue-400 font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                            ➕ Ajouter une adresse
-                        </button>
+                        <button onclick="openModal()" class="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 text-blue-400 font-medium py-3 rounded-xl">➕ Ajouter une adresse</button>
                     </div>
                 </div>
-
-                <!-- Carte Leaflet -->
                 <div class="lg:col-span-2 rounded-2xl border border-white/10 overflow-hidden relative order-1 lg:order-2" style="min-height: 400px;">
                     <div id="map" class="w-full h-full" style="min-height: 400px; height: 100%;"></div>
                 </div>
@@ -160,12 +150,12 @@
         </div>
     </div>
 
-    <!-- Modal -->
-    <div id="modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
-        <div class="bg-slate-800 rounded-2xl p-5 sm:p-6 w-full max-w-md border border-white/10 shadow-2xl slide-in">
+    <!-- MODAL -->
+    <div id="modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4" style="z-index: 99999 !important;">
+        <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md border border-white/10 shadow-2xl slide-in">
             <div class="flex items-center justify-between mb-5">
                 <h2 class="text-lg font-bold text-white">➕ Ajouter une adresse</h2>
-                <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg text-slate-400">✕</button>
+                <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 text-xl">✕</button>
             </div>
             <form onsubmit="handleAddLocation(event)" class="space-y-4">
                 <div>
@@ -176,460 +166,69 @@
                     <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse</label>
                     <input type="text" id="input-adresse" required placeholder="Ex: 123 rue Example, Montréal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                 </div>
-                <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all">
-                    ➕ Ajouter
-                </button>
+                <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl">➕ Ajouter</button>
             </form>
         </div>
     </div>
 
     <script>
-        // ============================================
-        // CONFIGURATION
-        // ============================================
-        const CONFIG = {
-            password: "CAUCA2025!",  // ⚠️ CHANGEZ CE MOT DE PASSE
-            orgName: "CAUCA",
-            storageKey: "hydro-quebec-monitor-v4",
-            sessionKey: "hqm-session-v4",
-            sessionDuration: 8,
-            refreshInterval: 15,
-            seuilDistanceKm: 2.0,
-            hqApiBase: "https://pannes.hydroquebec.com/pannes/donnees/v3_0",
-            corsProxies: [
-                "https://corsproxy.io/?",
-                "https://api.allorigins.win/raw?url="
-            ]
-        };
+        // Config par défaut
+        const DEFAULT_CONFIG = { password: "CAUCA2025!", orgName: "CAUCA", sessionDuration: 8, refreshInterval: 15, seuilDistanceKm: 2.0 };
+        const APP_CONFIG = (typeof CONFIG !== 'undefined') ? { ...DEFAULT_CONFIG, ...CONFIG } : DEFAULT_CONFIG;
+        const ADRESSES_INITIALES = (typeof ADRESSES_PREDEFINIES !== 'undefined') ? ADRESSES_PREDEFINIES : [];
 
-        // ============================================
-        // ÉTAT
-        // ============================================
-        let state = {
-            locations: [],
-            pannesHQ: [],
-            selectedId: null,
-            filtreStatut: 'tous',
-            recherche: '',
-            isLoading: false,
-            lastUpdate: null,
-            error: null,
-            proxyIndex: 0
-        };
+        const STORAGE_KEY = "hqm-locations-v6";
+        const SESSION_KEY = "hqm-session-v6";
+        const HQ_API = "https://pannes.hydroquebec.com/pannes/donnees/v3_0";
+        const CORS_PROXIES = ["https://corsproxy.io/?", "https://api.allorigins.win/raw?url="];
 
-        let map = null;
-        let markers = {};
+        let state = { locations: [], pannesHQ: [], selectedId: null, filtreStatut: 'tous', recherche: '', isLoading: false, lastUpdate: null, error: null, proxyIndex: 0 };
+        let map = null, markers = {};
 
-        // ============================================
-        // AUTH
-        // ============================================
-        function checkSession() {
-            try {
-                const session = localStorage.getItem(CONFIG.sessionKey);
-                if (session) {
-                    const data = JSON.parse(session);
-                    if (new Date(data.expiry) > new Date()) return true;
-                }
-            } catch (e) {}
-            return false;
-        }
+        // Auth
+        function checkSession() { try { const s = localStorage.getItem(SESSION_KEY); if (s) { const d = JSON.parse(s); if (new Date(d.expiry) > new Date()) return true; } } catch(e){} return false; }
+        function createSession() { const e = new Date(); e.setHours(e.getHours() + APP_CONFIG.sessionDuration); localStorage.setItem(SESSION_KEY, JSON.stringify({ expiry: e.toISOString() })); }
+        function handleLogin(e) { e.preventDefault(); if (document.getElementById('password-input').value === APP_CONFIG.password) { createSession(); document.getElementById('login-screen').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); initApp(); } else { document.getElementById('error-message').classList.remove('hidden'); document.getElementById('login-form').classList.add('shake'); setTimeout(() => document.getElementById('login-form').classList.remove('shake'), 300); document.getElementById('password-input').value = ''; } }
+        function logout() { localStorage.removeItem(SESSION_KEY); window.location.reload(); }
 
-        function createSession() {
-            const expiry = new Date();
-            expiry.setHours(expiry.getHours() + CONFIG.sessionDuration);
-            localStorage.setItem(CONFIG.sessionKey, JSON.stringify({ authenticated: true, expiry: expiry.toISOString() }));
-        }
+        // Storage
+        function loadSavedData() { try { const s = localStorage.getItem(STORAGE_KEY); if (s) state.locations = JSON.parse(s).locations || []; if (state.locations.length === 0 && ADRESSES_INITIALES.length > 0) { state.locations = ADRESSES_INITIALES.map((a,i) => ({ id: Date.now()+i, nom: a.nom, adresse: a.adresse, lat: a.lat, lng: a.lng, enPanne: false, panne: null })); saveData(); } } catch(e){} }
+        function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify({ locations: state.locations })); }
+        function resetToDefault() { if (confirm("Charger les adresses depuis config.js?\nCela remplacera les adresses actuelles.")) { state.locations = ADRESSES_INITIALES.map((a,i) => ({ id: Date.now()+i, nom: a.nom, adresse: a.adresse, lat: a.lat, lng: a.lng, enPanne: false, panne: null })); saveData(); updateLocationsStatus(); } }
 
-        function handleLogin(e) {
-            e.preventDefault();
-            const password = document.getElementById('password-input').value;
-            if (password === CONFIG.password) {
-                createSession();
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('app').classList.remove('hidden');
-                initApp();
-            } else {
-                document.getElementById('error-message').classList.remove('hidden');
-                document.getElementById('login-form').classList.add('shake');
-                setTimeout(() => document.getElementById('login-form').classList.remove('shake'), 300);
-                document.getElementById('password-input').value = '';
-            }
-        }
+        // API
+        async function fetchWithProxy(url) { try { const r = await fetch(url); if (r.ok) return await r.text(); } catch(e){} for (let i=0; i<CORS_PROXIES.length; i++) { try { const r = await fetch(CORS_PROXIES[i] + encodeURIComponent(url)); if (r.ok) return await r.text(); } catch(e){} } throw new Error("API indisponible"); }
+        async function fetchPannesHQ() { state.isLoading = true; state.error = null; updateUI(); try { const v = (await fetchWithProxy(`${HQ_API}/bisversion.json`)).replace(/"/g,'').trim(); const m = JSON.parse(await fetchWithProxy(`${HQ_API}/bismarkers${v}.json`)); state.pannesHQ = Array.isArray(m) ? m : (m.markers || []); state.lastUpdate = new Date(); updateLocationsStatus(); } catch(e) { state.error = "Données HQ indisponibles"; } state.isLoading = false; updateUI(); }
+        function calcDist(lat1,lon1,lat2,lon2) { const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180, a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+        function updateLocationsStatus() { state.locations = state.locations.map(loc => { let enPanne=false, panneInfo=null, distMin=Infinity; for (const p of state.pannesHQ) { const pLat=parseFloat(p.lat||p.latitude||0), pLng=parseFloat(p.lng||p.lon||p.longitude||0); if (!pLat||!pLng) continue; const d=calcDist(loc.lat,loc.lng,pLat,pLng); if (d<distMin) { distMin=d; if (d<=APP_CONFIG.seuilDistanceKm) { enPanne=true; panneInfo={cause:p.cause||p.causeLib||'Non spécifiée',debut:p.dateDebut||'Inconnue',retablissement:p.dateRetablissementPrevue||null,clientsAffectes:parseInt(p.nbClient||0)}; }}} return {...loc,enPanne,panne:panneInfo,distancePanneProche:distMin===Infinity?null:distMin.toFixed(1)}; }); saveData(); updateUI(); updateMapMarkers(); }
+        async function geocode(addr) { const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr+', Québec, Canada')}&format=json&limit=1&countrycodes=ca`); const d = await r.json(); if (d?.length>0) return {lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)}; throw new Error("Adresse non trouvée"); }
 
-        function logout() {
-            localStorage.removeItem(CONFIG.sessionKey);
-            window.location.reload();
-        }
+        // Map
+        function initMap() { map = L.map('map',{center:[46.8,-71.2],zoom:7}); L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map); setTimeout(()=>map.invalidateSize(),100); }
+        function updateMapMarkers() { Object.values(markers).forEach(m=>map.removeLayer(m)); markers={}; const filtered=getFiltered(), bounds=[]; filtered.forEach(loc => { const icon=L.divIcon({className:'',html:`<div class="marker-pin ${loc.enPanne?'panne':'ok'}"></div>`,iconSize:[24,24],iconAnchor:[12,12]}); const m=L.marker([loc.lat,loc.lng],{icon}).addTo(map).bindPopup(`<div style="min-width:180px"><b>${loc.nom}</b><br><small style="color:#94a3b8">${loc.adresse}</small><br><span style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;${loc.enPanne?'background:#ef4444':'background:#22c55e'};color:white">${loc.enPanne?'⚡ PANNE':'✓ OK'}</span>${loc.enPanne&&loc.panne?`<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,0.15);border-radius:6px;font-size:11px"><div style="color:#f87171">⚠️ ${loc.panne.cause}</div><div style="color:#94a3b8">${loc.panne.clientsAffectes} clients</div></div>`:''}</div>`); m.on('click',()=>selectLocation(loc.id)); markers[loc.id]=m; bounds.push([loc.lat,loc.lng]); }); if (bounds.length>0) bounds.length===1?map.setView(bounds[0],12):map.fitBounds(bounds,{padding:[50,50]}); }
 
-        // ============================================
-        // STOCKAGE
-        // ============================================
-        function loadSavedData() {
-            try {
-                const saved = localStorage.getItem(CONFIG.storageKey);
-                if (saved) state.locations = JSON.parse(saved).locations || [];
-            } catch (e) {}
-        }
-
-        function saveData() {
-            localStorage.setItem(CONFIG.storageKey, JSON.stringify({ locations: state.locations }));
-        }
-
-        // ============================================
-        // API HYDRO-QUÉBEC
-        // ============================================
-        async function fetchWithCorsProxy(url) {
-            try {
-                const directRes = await fetch(url, { mode: 'cors' });
-                if (directRes.ok) return await directRes.text();
-            } catch (e) {}
-
-            for (let i = 0; i < CONFIG.corsProxies.length; i++) {
-                const proxyUrl = CONFIG.corsProxies[(state.proxyIndex + i) % CONFIG.corsProxies.length];
-                try {
-                    const res = await fetch(proxyUrl + encodeURIComponent(url));
-                    if (res.ok) {
-                        state.proxyIndex = (state.proxyIndex + i) % CONFIG.corsProxies.length;
-                        return await res.text();
-                    }
-                } catch (e) {}
-            }
-            throw new Error("API indisponible");
-        }
-
-        async function fetchPannesHQ() {
-            state.isLoading = true;
-            state.error = null;
-            updateUI();
-
-            try {
-                const versionText = await fetchWithCorsProxy(`${CONFIG.hqApiBase}/bisversion.json`);
-                const version = versionText.replace(/"/g, '').trim();
-
-                const markersText = await fetchWithCorsProxy(`${CONFIG.hqApiBase}/bismarkers${version}.json`);
-                const markersData = JSON.parse(markersText);
-
-                state.pannesHQ = Array.isArray(markersData) ? markersData : (markersData.markers || []);
-                state.lastUpdate = new Date();
-
-                updateLocationsStatus();
-            } catch (e) {
-                state.error = "Impossible de charger les données";
-            } finally {
-                state.isLoading = false;
-                updateUI();
-            }
-        }
-
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) ** 2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
-
-        function updateLocationsStatus() {
-            state.locations = state.locations.map(loc => {
-                let enPanne = false, panneInfo = null, distanceMin = Infinity;
-
-                for (const panne of state.pannesHQ) {
-                    const panneLat = parseFloat(panne.lat || panne.latitude || 0);
-                    const panneLng = parseFloat(panne.lng || panne.lon || panne.longitude || 0);
-                    if (!panneLat || !panneLng) continue;
-
-                    const distance = calculateDistance(loc.lat, loc.lng, panneLat, panneLng);
-                    if (distance < distanceMin) {
-                        distanceMin = distance;
-                        if (distance <= CONFIG.seuilDistanceKm) {
-                            enPanne = true;
-                            panneInfo = {
-                                cause: panne.cause || panne.causeLib || 'Non spécifiée',
-                                debut: panne.dateDebut || 'Inconnue',
-                                retablissement: panne.dateRetablissementPrevue || null,
-                                clientsAffectes: parseInt(panne.nbClient || 0)
-                            };
-                        }
-                    }
-                }
-
-                return { ...loc, enPanne, panne: panneInfo, distancePanneProche: distanceMin === Infinity ? null : distanceMin.toFixed(1) };
-            });
-            saveData();
-            updateUI();
-            updateMapMarkers();
-        }
-
-        async function geocodeAddress(adresse) {
-            const query = encodeURIComponent(`${adresse}, Québec, Canada`);
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=ca`);
-            const data = await res.json();
-            if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-            throw new Error("Adresse non trouvée");
-        }
-
-        // ============================================
-        // CARTE LEAFLET
-        // ============================================
-        function initMap() {
-            map = L.map('map', {
-                center: [46.8, -71.2],
-                zoom: 7,
-                zoomControl: true
-            });
-
-            // Tuiles CartoDB Dark (thème sombre)
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 19
-            }).addTo(map);
-
-            // Forcer un resize après init
-            setTimeout(() => map.invalidateSize(), 100);
-        }
-
-        function updateMapMarkers() {
-            // Supprimer les anciens marqueurs
-            Object.values(markers).forEach(m => map.removeLayer(m));
-            markers = {};
-
-            const filtered = getFilteredLocations();
-            const bounds = [];
-
-            filtered.forEach(loc => {
-                const icon = L.divIcon({
-                    className: 'custom-marker',
-                    html: `<div class="marker-pin ${loc.enPanne ? 'panne' : 'ok'}"></div>`,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
-                });
-
-                const marker = L.marker([loc.lat, loc.lng], { icon })
-                    .addTo(map)
-                    .bindPopup(`
-                        <div style="min-width: 180px;">
-                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${loc.nom}</div>
-                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">${loc.adresse}</div>
-                            <div style="display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; ${loc.enPanne ? 'background: #ef4444; color: white;' : 'background: #22c55e; color: white;'}">
-                                ${loc.enPanne ? '⚡ EN PANNE' : '✓ Normal'}
-                            </div>
-                            ${loc.enPanne && loc.panne ? `
-                                <div style="margin-top: 8px; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px; font-size: 11px;">
-                                    <div style="color: #f87171;">${loc.panne.cause}</div>
-                                    <div style="color: #94a3b8;">${loc.panne.clientsAffectes} clients affectés</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `);
-
-                marker.on('click', () => selectLocation(loc.id));
-                markers[loc.id] = marker;
-                bounds.push([loc.lat, loc.lng]);
-            });
-
-            // Ajuster la vue si des marqueurs existent
-            if (bounds.length > 0) {
-                if (bounds.length === 1) {
-                    map.setView(bounds[0], 12);
-                } else {
-                    map.fitBounds(bounds, { padding: [50, 50] });
-                }
-            }
-        }
-
-        // ============================================
         // UI
-        // ============================================
-        function getFilteredLocations() {
-            return state.locations.filter(loc => {
-                const matchRecherche = loc.nom.toLowerCase().includes(state.recherche.toLowerCase()) || loc.adresse.toLowerCase().includes(state.recherche.toLowerCase());
-                const matchStatut = state.filtreStatut === 'tous' || (state.filtreStatut === 'panne' && loc.enPanne) || (state.filtreStatut === 'normal' && !loc.enPanne);
-                return matchRecherche && matchStatut;
-            });
-        }
+        function getFiltered() { return state.locations.filter(l => (l.nom.toLowerCase().includes(state.recherche.toLowerCase())||l.adresse.toLowerCase().includes(state.recherche.toLowerCase())) && (state.filtreStatut==='tous'||(state.filtreStatut==='panne'&&l.enPanne)||(state.filtreStatut==='normal'&&!l.enPanne))); }
+        function updateUI() { document.getElementById('stat-total').textContent=state.locations.length; document.getElementById('stat-ok').textContent=state.locations.filter(l=>!l.enPanne).length; document.getElementById('stat-panne').textContent=state.locations.filter(l=>l.enPanne).length; document.getElementById('stat-hq').textContent=state.pannesHQ.length; document.getElementById('last-update').textContent=state.lastUpdate?state.lastUpdate.toLocaleTimeString('fr-CA'):'--:--'; document.getElementById('status-dot').className=`w-2 h-2 rounded-full ${state.isLoading?'bg-amber-400 animate-ping':(state.lastUpdate&&!state.error?'bg-green-400 animate-pulse':'bg-amber-400 animate-pulse')}`; document.getElementById('refresh-text').textContent=state.isLoading?'...':'Actualiser'; const eb=document.getElementById('error-banner'); if(state.error){eb.classList.remove('hidden');eb.classList.add('flex');eb.textContent=state.error;}else{eb.classList.add('hidden');} renderList(); }
+        function renderList() { const list=document.getElementById('locations-list'), filtered=getFiltered(); if(!filtered.length){list.innerHTML=`<div class="text-center py-8 text-slate-500"><div class="text-4xl mb-3">📍</div><p>${state.locations.length?'Aucun résultat':'Ajoutez une adresse'}</p></div>`;return;} list.innerHTML=filtered.map(l=>`<div onclick="selectLocation(${l.id})" class="relative p-3 rounded-xl cursor-pointer group ${state.selectedId===l.id?'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400':'bg-white/5 border border-white/10 hover:bg-white/10'} ${l.enPanne?'ring-2 ring-red-500/50':''}"><div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${l.enPanne?'bg-red-500 text-white animate-pulse-slow':'bg-green-500/80 text-white'}">${l.enPanne?'⚡ PANNE':'✓ OK'}</div><div class="flex items-start gap-3"><div class="text-lg">${l.enPanne?'🔴':'🟢'}</div><div class="flex-1 min-w-0"><h3 class="font-semibold text-white truncate text-sm">${l.nom}</h3><p class="text-xs text-slate-400 truncate">${l.adresse}</p>${l.enPanne&&l.panne?`<div class="mt-2 p-2 bg-red-500/10 rounded-lg text-xs"><div class="text-red-400 font-medium">⚠️ ${l.panne.cause}</div><div class="text-slate-400">${l.panne.clientsAffectes} clients</div></div>`:(l.distancePanneProche?`<div class="mt-1 text-xs text-slate-500">Panne: ${l.distancePanneProche} km</div>`:'')}</div></div><button onclick="event.stopPropagation();deleteLocation(${l.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg opacity-0 group-hover:opacity-100 text-red-400">🗑️</button></div>`).join(''); }
 
-        function updateUI() {
-            // Stats
-            document.getElementById('stat-total').textContent = state.locations.length;
-            document.getElementById('stat-ok').textContent = state.locations.filter(l => !l.enPanne).length;
-            document.getElementById('stat-panne').textContent = state.locations.filter(l => l.enPanne).length;
-            document.getElementById('stat-hq').textContent = state.pannesHQ.length;
+        // Actions
+        function selectLocation(id) { state.selectedId=state.selectedId===id?null:id; updateUI(); if(state.selectedId&&markers[id]){const l=state.locations.find(x=>x.id===id);map.setView([l.lat,l.lng],14);markers[id].openPopup();} }
+        function setFiltre(f) { state.filtreStatut=f; document.querySelectorAll('#filter-buttons button').forEach(b=>{b.className=`flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium ${b.dataset.filter===f?'bg-blue-500/20 text-blue-400 border border-blue-500/30':'bg-white/5 text-slate-400 hover:bg-white/10'}`;}); updateUI(); updateMapMarkers(); }
+        function handleSearch(v) { state.recherche=v; updateUI(); updateMapMarkers(); }
+        function openModal() { const m=document.getElementById('modal');m.classList.remove('hidden');m.classList.add('flex');document.getElementById('input-nom').focus(); }
+        function closeModal() { const m=document.getElementById('modal');m.classList.add('hidden');m.classList.remove('flex');document.getElementById('input-nom').value='';document.getElementById('input-adresse').value=''; }
+        function deleteLocation(id) { if(confirm('Supprimer?')){state.locations=state.locations.filter(l=>l.id!==id);if(state.selectedId===id)state.selectedId=null;saveData();updateUI();updateMapMarkers();} }
+        async function handleAddLocation(e) { e.preventDefault(); const nom=document.getElementById('input-nom').value.trim(),addr=document.getElementById('input-adresse').value.trim(),btn=document.getElementById('btn-submit'); btn.disabled=true;btn.textContent='⏳ Géocodage...'; try{const g=await geocode(addr);state.locations.push({id:Date.now(),nom,adresse:addr,lat:g.lat,lng:g.lng,enPanne:false,panne:null});updateLocationsStatus();closeModal();}catch(err){alert("Erreur: "+err.message);}finally{btn.disabled=false;btn.textContent='➕ Ajouter';} }
+        async function refreshData() { if(!state.isLoading) await fetchPannesHQ(); }
+        function exportData() { const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({exportDate:new Date().toISOString(),locations:state.locations.map(l=>({nom:l.nom,adresse:l.adresse,lat:l.lat,lng:l.lng}))},null,2)],{type:'application/json'}));a.download=`hydro-monitor-${new Date().toISOString().split('T')[0]}.json`;a.click(); }
+        function importData(file) { const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.locations){state.locations=[...state.locations,...d.locations.map((l,i)=>({id:Date.now()+i,...l,enPanne:false,panne:null}))];updateLocationsStatus();alert(`${d.locations.length} adresse(s) importée(s)!`);}}catch(err){alert("Erreur: "+err.message);}};r.readAsText(file); }
 
-            // Status
-            document.getElementById('last-update').textContent = state.lastUpdate ? state.lastUpdate.toLocaleTimeString('fr-CA') : '--:--';
-            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${state.isLoading ? 'bg-amber-400 animate-ping' : (state.lastUpdate && !state.error ? 'bg-green-400 animate-pulse' : 'bg-amber-400 animate-pulse')}`;
-            document.getElementById('refresh-text').textContent = state.isLoading ? 'Chargement...' : 'Actualiser';
-            document.getElementById('refresh-btn').disabled = state.isLoading;
-
-            // Error
-            const errorBanner = document.getElementById('error-banner');
-            if (state.error) {
-                errorBanner.classList.remove('hidden');
-                errorBanner.textContent = state.error;
-            } else {
-                errorBanner.classList.add('hidden');
-            }
-
-            // Liste
-            renderLocationsList();
-        }
-
-        function renderLocationsList() {
-            const list = document.getElementById('locations-list');
-            const filtered = getFilteredLocations();
-
-            if (filtered.length === 0) {
-                list.innerHTML = `<div class="text-center py-8 text-slate-500"><div class="text-4xl mb-3">📍</div><p>${state.locations.length === 0 ? 'Ajoutez votre première adresse' : 'Aucun résultat'}</p></div>`;
-                return;
-            }
-
-            list.innerHTML = filtered.map(loc => `
-                <div onclick="selectLocation(${loc.id})" class="relative p-3 sm:p-4 rounded-xl cursor-pointer transition-all duration-200 group ${state.selectedId === loc.id ? 'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400' : 'bg-white/5 border border-white/10 hover:bg-white/10'} ${loc.enPanne ? 'ring-2 ring-red-500/50' : ''}">
-                    <div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${loc.enPanne ? 'bg-red-500 text-white animate-pulse-slow' : 'bg-green-500/80 text-white'}">${loc.enPanne ? '⚡ PANNE' : '✓ OK'}</div>
-                    <div class="flex items-start gap-3">
-                        <div class="text-lg">${loc.enPanne ? '🔴' : '🟢'}</div>
-                        <div class="flex-1 min-w-0">
-                            <h3 class="font-semibold text-white truncate text-sm">${loc.nom}</h3>
-                            <p class="text-xs text-slate-400 truncate">${loc.adresse}</p>
-                            ${loc.enPanne && loc.panne ? `<div class="mt-2 p-2 bg-red-500/10 rounded-lg text-xs"><div class="text-red-400 font-medium">⚠️ ${loc.panne.cause}</div><div class="text-slate-400">${loc.panne.clientsAffectes} clients</div></div>` : (loc.distancePanneProche ? `<div class="mt-1 text-xs text-slate-500">Panne la plus proche: ${loc.distancePanneProche} km</div>` : '')}
-                        </div>
-                    </div>
-                    <button onclick="event.stopPropagation(); deleteLocation(${loc.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg opacity-0 group-hover:opacity-100 text-red-400">🗑️</button>
-                </div>
-            `).join('');
-        }
-
-        // ============================================
-        // ACTIONS
-        // ============================================
-        function selectLocation(id) {
-            state.selectedId = state.selectedId === id ? null : id;
-            updateUI();
-
-            if (state.selectedId && markers[id]) {
-                const loc = state.locations.find(l => l.id === id);
-                map.setView([loc.lat, loc.lng], 14);
-                markers[id].openPopup();
-            }
-        }
-
-        function setFiltre(f) {
-            state.filtreStatut = f;
-            document.querySelectorAll('#filter-buttons button').forEach(btn => {
-                const isActive = btn.dataset.filter === f;
-                btn.className = `flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${isActive ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`;
-            });
-            updateUI();
-            updateMapMarkers();
-        }
-
-        function handleSearch(v) {
-            state.recherche = v;
-            updateUI();
-            updateMapMarkers();
-        }
-
-        function openModal() {
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('modal').classList.add('flex');
-        }
-
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-            document.getElementById('modal').classList.remove('flex');
-            document.getElementById('input-nom').value = '';
-            document.getElementById('input-adresse').value = '';
-        }
-
-        function deleteLocation(id) {
-            if (confirm('Supprimer cette adresse?')) {
-                state.locations = state.locations.filter(l => l.id !== id);
-                if (state.selectedId === id) state.selectedId = null;
-                saveData();
-                updateUI();
-                updateMapMarkers();
-            }
-        }
-
-        async function handleAddLocation(e) {
-            e.preventDefault();
-            const nom = document.getElementById('input-nom').value.trim();
-            const adresse = document.getElementById('input-adresse').value.trim();
-            const btn = document.getElementById('btn-submit');
-
-            btn.disabled = true;
-            btn.textContent = '⏳ Géocodage...';
-
-            try {
-                const geo = await geocodeAddress(adresse);
-                state.locations.push({ id: Date.now(), nom, adresse, lat: geo.lat, lng: geo.lng, enPanne: false, panne: null });
-                updateLocationsStatus();
-                closeModal();
-            } catch (err) {
-                alert("Erreur: " + err.message);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '➕ Ajouter';
-            }
-        }
-
-        async function refreshData() {
-            if (state.isLoading) return;
-            await fetchPannesHQ();
-        }
-
-        function exportData() {
-            const data = { exportDate: new Date().toISOString(), locations: state.locations.map(l => ({ nom: l.nom, adresse: l.adresse, lat: l.lat, lng: l.lng })) };
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-            a.download = `hydro-monitor-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-        }
-
-        function importData(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.locations) {
-                        const newLocs = data.locations.map((l, i) => ({ id: Date.now() + i, ...l, enPanne: false, panne: null }));
-                        state.locations = [...state.locations, ...newLocs];
-                        updateLocationsStatus();
-                        alert(`${newLocs.length} adresse(s) importée(s)!`);
-                    }
-                } catch (err) { alert("Erreur: " + err.message); }
-            };
-            reader.readAsText(file);
-        }
-
-        // ============================================
-        // INIT
-        // ============================================
-        async function initApp() {
-            document.getElementById('org-name').textContent = CONFIG.orgName;
-            document.getElementById('menu-org').textContent = CONFIG.orgName;
-            
-            loadSavedData();
-            initMap();
-            updateUI();
-            updateMapMarkers();
-            await refreshData();
-            
-            setInterval(refreshData, CONFIG.refreshInterval * 60 * 1000);
-        }
-
-        // Fermer modal sur click extérieur
-        document.getElementById('modal').addEventListener('click', (e) => {
-            if (e.target.id === 'modal') closeModal();
-        });
-
-        // Vérifier session
-        if (checkSession()) {
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('app').classList.remove('hidden');
-            initApp();
-        }
+        // Init
+        async function initApp() { ['org-name','menu-org'].forEach(id=>document.getElementById(id).textContent=APP_CONFIG.orgName); document.getElementById('login-org').textContent=`Accès réservé - ${APP_CONFIG.orgName}`; loadSavedData(); initMap(); updateUI(); updateMapMarkers(); await refreshData(); setInterval(refreshData,APP_CONFIG.refreshInterval*60*1000); }
+        document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+        document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+        if(checkSession()){document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');initApp();}else if(typeof APP_CONFIG!=='undefined'){document.getElementById('login-org').textContent=`Accès réservé - ${APP_CONFIG.orgName}`;}
     </script>
 </body>
 </html>
