@@ -70,9 +70,9 @@
                     <span class="text-xs text-slate-500 hidden md:block" id="last-update">--:--</span>
                     <button onclick="toggleZones()" id="zones-btn" class="p-2 sm:px-3 sm:py-2 bg-orange-500/20 border border-orange-500/30 rounded-xl text-sm text-orange-400">🔥 <span class="hidden sm:inline">Zones HQ</span></button>
                     <button onclick="refreshData()" id="refresh-btn" class="p-2 sm:px-4 sm:py-2 bg-white/5 border border-white/10 rounded-xl text-sm flex items-center gap-2"><div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse" id="status-dot"></div><span class="hidden sm:inline" id="refresh-text">Actualiser</span></button>
-                    <div class="relative group">
-                        <button class="p-2 hover:bg-white/10 rounded-xl"><div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div></button>
-                        <div class="dropdown-menu absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible">
+                    <div class="relative">
+                        <button onclick="toggleMenu()" class="p-2 hover:bg-white/10 rounded-xl"><div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div></button>
+                        <div id="user-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 hidden">
                             <div class="p-3 border-b border-white/10"><p class="font-medium" id="menu-org"></p><p class="text-xs text-slate-500">Connecté</p></div>
                             <div class="p-2">
                                 <button onclick="exportData()" class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
@@ -272,6 +272,7 @@ function updateUI(){document.getElementById('stat-total').textContent=S.locs.len
 function renderList(){const list=document.getElementById('list'),f=getFiltered();if(!f.length){list.innerHTML=`<div class="text-center py-8 text-slate-500"><div class="text-4xl mb-3">📍</div><p>${S.locs.length?'Aucun résultat':'Ajoutez une adresse'}</p></div>`;return;}list.innerHTML=f.map(l=>`<div onclick="selLoc(${l.id})" class="relative p-3 rounded-xl cursor-pointer group ${S.selId===l.id?'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400':'bg-white/5 border border-white/10 hover:bg-white/10'} ${l.enPanne?'ring-2 ring-red-500/50':''}"><div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${l.enPanne?'bg-red-500 text-white animate-pulse-slow':'bg-green-500/80 text-white'}">${l.enPanne?'⚡ PANNE':'✓ OK'}</div><div class="flex items-start gap-3"><div class="text-lg">${l.enPanne?'🔴':'🟢'}</div><div class="flex-1 min-w-0"><h3 class="font-semibold text-white truncate text-sm">${l.nom}</h3><p class="text-xs text-slate-400 truncate">${l.adresse}</p>${l.enPanne&&l.panne?`<div class="mt-2 p-2 bg-red-500/10 rounded-lg text-xs text-red-400">⚠️ ${l.panne.cause}</div>`:(l.distP?`<div class="mt-1 text-xs text-slate-500">Panne: ${l.distP} km</div>`:'')}</div></div><button onclick="event.stopPropagation();delLoc(${l.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg opacity-0 group-hover:opacity-100 text-red-400">🗑️</button></div>`).join('');}
 
 // Actions
+function toggleMenu(){const m=document.getElementById('user-menu');m.classList.toggle('hidden');}
 function selLoc(id){S.selId=S.selId===id?null:id;updateUI();if(S.selId&&markers[id]){const l=S.locs.find(x=>x.id===id);map.setView([l.lat,l.lng],14);markers[id].openPopup();}}
 function setFilter(f){S.filter=f;document.querySelectorAll('#filter-btns button').forEach(b=>{b.className=`flex-1 py-2 rounded-lg text-xs font-medium ${b.dataset.f===f?'bg-blue-500/20 text-blue-400 border border-blue-500/30':'bg-white/5 text-slate-400'}`});updateUI();updateMarkers();}
 function handleSearch(v){S.search=v;updateUI();updateMarkers();}
@@ -287,7 +288,10 @@ function importData(file){const r=new FileReader();r.onload=e=>{try{const d=JSON
 async function initApp(){['org-name','menu-org'].forEach(id=>document.getElementById(id).textContent=CFG.orgName);document.getElementById('login-org').textContent=`Accès réservé - ${CFG.orgName}`;load();initMap();updateUI();updateMarkers();await refreshData();setInterval(refreshData,CFG.refreshInterval*60*1000);}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-document.addEventListener('click',e=>{if(!e.target.closest('#autocomplete')&&!e.target.closest('#input-addr'))hideAuto();});
+document.addEventListener('click',e=>{
+    if(!e.target.closest('#autocomplete')&&!e.target.closest('#input-addr'))hideAuto();
+    if(!e.target.closest('#user-menu')&&!e.target.closest('[onclick="toggleMenu()"]'))document.getElementById('user-menu').classList.add('hidden');
+});
 if(checkSess()){document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');initApp();}else{document.getElementById('login-org').textContent=`Accès réservé - ${CFG.orgName}`;}
 </script>
 </body>
