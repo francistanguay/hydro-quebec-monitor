@@ -67,9 +67,9 @@
                     <span class="text-xs text-slate-500 hidden md:block" id="last-update">--:--</span>
                     <button onclick="toggleZones()" id="zones-btn" class="p-2 sm:px-3 sm:py-2 bg-orange-500/20 border border-orange-500/30 rounded-xl text-sm text-orange-400">🔥 <span class="hidden sm:inline">Zones HQ</span></button>
                     <button onclick="refreshData()" id="refresh-btn" class="p-2 sm:px-4 sm:py-2 bg-white/5 border border-white/10 rounded-xl text-sm flex items-center gap-2"><div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse" id="status-dot"></div><span class="hidden sm:inline" id="refresh-text">Actualiser</span></button>
-                    <div class="relative group">
+                    <div class="relative group" style="z-index:10000">
                         <button class="p-2 hover:bg-white/10 rounded-xl"><div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div></button>
-                        <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible z-[9998]">
+                        <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible" style="z-index:10001">
                             <div class="p-3 border-b border-white/10"><p class="font-medium" id="menu-org"></p><p class="text-xs text-slate-500">Connecté</p></div>
                             <div class="p-2">
                                 <button onclick="exportData()" class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
@@ -171,63 +171,47 @@ function load(){try{const s=localStorage.getItem(STORE_KEY);if(s)S.locs=JSON.par
 function save(){localStorage.setItem(STORE_KEY,JSON.stringify({locs:S.locs}));}
 function resetConfig(){if(confirm("Charger config.js?")){S.locs=INIT_ADDR.map((a,i)=>({id:Date.now()+i,nom:a.nom,adresse:a.adresse,lat:a.lat,lng:a.lng,enPanne:false,panne:null}));save();updateStatus();}}
 
-// API - CORS Proxies (on force leur utilisation car HQ bloque CORS)
+// API - CORS Proxies
 const PROXIES=[
     url=>`https://corsproxy.io/?${encodeURIComponent(url)}`,
     url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    url=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-    url=>`https://crossorigin.me/${url}`
+    url=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
 async function fetchP(url){
-    // Toujours utiliser un proxy car HQ n'a pas CORS
     for(const makeProxy of PROXIES){
         try{
             const proxyUrl=makeProxy(url);
-            console.log("Trying:",proxyUrl.substring(0,60)+"...");
             const r=await fetch(proxyUrl);
             if(r.ok){
                 const text=await r.text();
-                if(text && text.length>0 && !text.includes('error')){
-                    console.log("Success! Got",text.length,"chars");
-                    return text;
-                }
+                if(text && text.length>0 && !text.includes('error'))return text;
             }
-        }catch(e){console.log("Proxy failed:",e.message);}
+        }catch(e){}
     }
     throw new Error("Tous les proxies ont échoué");
 }
 async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
-    console.log("=== Fetching HQ Data ===");
     const versionUrl=`${HQ_API}/bisversion.json`;
     const vText=await fetchP(versionUrl);
     const v=vText.replace(/["\s]/g,'');
-    console.log("Version:",v);
     
     const markersUrl=`${HQ_API}/bismarkers${v}.json`;
     const rawText=await fetchP(markersUrl);
-    console.log("Markers response length:",rawText.length);
-    console.log("Raw response preview:",rawText.substring(0,500));
     
     let raw=JSON.parse(rawText);
-    console.log("Parsed type:",typeof raw,"isArray:",Array.isArray(raw));
-    console.log("Object keys:",Object.keys(raw||{}));
     
-    // Chercher le tableau de pannes dans différentes structures possibles
+    // Chercher le tableau de pannes dans la structure
     let pannesArray=[];
     if(Array.isArray(raw)){
         pannesArray=raw;
     }else if(raw && typeof raw==='object'){
-        // Chercher un tableau dans les propriétés de l'objet
         for(const key of Object.keys(raw)){
             if(Array.isArray(raw[key])){
-                console.log("Found array in key:",key,"length:",raw[key].length);
                 pannesArray=raw[key];
                 break;
             }
         }
     }
-    console.log("pannesArray length:",pannesArray.length);
-    if(pannesArray.length>0)console.log("First item:",JSON.stringify(pannesArray[0]));
     
     // Format HQ: [nbClients, dateDebut, dateFin, type, "[lng,lat]", statut, code, id, cause, ""]
     S.pannes=[];
@@ -250,19 +234,18 @@ async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
                     cause:p[8]||'Non spécifiée'
                 });
             }
-        }catch(e){if(i<3)console.log("Parse error item",i,":",e.message);}
+        }catch(e){}
     }
-    console.log("Pannes HQ valides:",S.pannes.length);
-    if(S.pannes.length>0)console.log("Exemple:",S.pannes[0]);
+    }
     S.lastUp=new Date();
     updateStatus();
     updateZones();
-}catch(e){console.error("Erreur API HQ:",e);S.err="Données HQ: "+e.message;}S.loading=false;updateUI();}
+}catch(e){S.err="Données HQ indisponibles";}S.loading=false;updateUI();}
 function dist(lat1,lon1,lat2,lon2){const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function updateStatus(){S.locs=S.locs.map(loc=>{let enPanne=false,info=null,dMin=Infinity;for(const p of S.pannes){if(!p.lat||!p.lng)continue;const d=dist(loc.lat,loc.lng,p.lat,p.lng);if(d<dMin){dMin=d;if(d<=CFG.seuilDistanceKm){enPanne=true;info={cause:p.cause||'Non spécifiée',clients:p.clients||0};}}}return{...loc,enPanne,panne:info,distP:dMin===Infinity?null:dMin.toFixed(1)};});save();updateUI();updateMarkers();}
 
 // Zones HQ
-function updateZones(){if(panneLayer)map.removeLayer(panneLayer);if(!S.showZones||!S.pannes.length)return;panneLayer=L.layerGroup();S.pannes.forEach(p=>{if(!p.lat||!p.lng)return;const cl=p.clients||100,r=Math.min(Math.max(cl*3,800),8000);const c=L.circle([p.lat,p.lng],{radius:r,color:'#f97316',fillColor:'#f97316',fillOpacity:0.2,weight:2,opacity:0.7});c.bindPopup(`<b style="color:#f97316">🔥 Panne HQ</b><br><small><b>Cause:</b> ${p.cause||'N/A'}<br><b>Clients:</b> ${cl}<br><b>Début:</b> ${p.debut||'N/A'}</small>`);panneLayer.addLayer(c);const icon=L.divIcon({className:'',html:'<div class="marker-hq"></div>',iconSize:[14,14],iconAnchor:[7,7]});L.marker([p.lat,p.lng],{icon}).bindPopup(c.getPopup()).addTo(panneLayer);});panneLayer.addTo(map);console.log("Zones affichées:",S.pannes.length);}
+function updateZones(){if(panneLayer)map.removeLayer(panneLayer);if(!S.showZones||!S.pannes.length)return;panneLayer=L.layerGroup();S.pannes.forEach(p=>{if(!p.lat||!p.lng)return;const cl=p.clients||100,r=Math.min(Math.max(cl*3,800),8000);const c=L.circle([p.lat,p.lng],{radius:r,color:'#f97316',fillColor:'#f97316',fillOpacity:0.2,weight:2,opacity:0.7});c.bindPopup(`<b style="color:#f97316">🔥 Panne HQ</b><br><small><b>Cause:</b> ${p.cause||'N/A'}<br><b>Clients:</b> ${cl}<br><b>Début:</b> ${p.debut||'N/A'}</small>`);panneLayer.addLayer(c);const icon=L.divIcon({className:'',html:'<div class="marker-hq"></div>',iconSize:[14,14],iconAnchor:[7,7]});L.marker([p.lat,p.lng],{icon}).bindPopup(c.getPopup()).addTo(panneLayer);});panneLayer.addTo(map);}
 function toggleZones(){S.showZones=!S.showZones;const b=document.getElementById('zones-btn');b.className=`p-2 sm:px-3 sm:py-2 rounded-xl text-sm ${S.showZones?'bg-orange-500/20 border border-orange-500/30 text-orange-400':'bg-white/5 border border-white/10 text-slate-400'}`;S.showZones?updateZones():panneLayer&&map.removeLayer(panneLayer);}
 
 // Autocomplete
