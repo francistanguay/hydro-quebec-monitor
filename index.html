@@ -206,34 +206,51 @@ async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
     const markersUrl=`${HQ_API}/bismarkers${v}.json`;
     const rawText=await fetchP(markersUrl);
     console.log("Markers response length:",rawText.length);
+    console.log("Raw response preview:",rawText.substring(0,500));
     
-    const raw=JSON.parse(rawText);
-    console.log("Parsed: isArray=",Array.isArray(raw),"length=",raw?.length);
+    let raw=JSON.parse(rawText);
+    console.log("Parsed type:",typeof raw,"isArray:",Array.isArray(raw));
+    console.log("Object keys:",Object.keys(raw||{}));
+    
+    // Chercher le tableau de pannes dans différentes structures possibles
+    let pannesArray=[];
+    if(Array.isArray(raw)){
+        pannesArray=raw;
+    }else if(raw && typeof raw==='object'){
+        // Chercher un tableau dans les propriétés de l'objet
+        for(const key of Object.keys(raw)){
+            if(Array.isArray(raw[key])){
+                console.log("Found array in key:",key,"length:",raw[key].length);
+                pannesArray=raw[key];
+                break;
+            }
+        }
+    }
+    console.log("pannesArray length:",pannesArray.length);
+    if(pannesArray.length>0)console.log("First item:",JSON.stringify(pannesArray[0]));
     
     // Format HQ: [nbClients, dateDebut, dateFin, type, "[lng,lat]", statut, code, id, cause, ""]
     S.pannes=[];
-    if(Array.isArray(raw)){
-        for(let i=0;i<raw.length;i++){
-            const p=raw[i];
-            if(!Array.isArray(p)||p.length<5)continue;
-            try{
-                const coordStr=String(p[4]);
-                const coords=JSON.parse(coordStr);
-                const lng=parseFloat(coords[0]);
-                const lat=parseFloat(coords[1]);
-                if(lat&&lng&&lat>40&&lat<65&&lng<-50&&lng>-85){
-                    S.pannes.push({
-                        clients:parseInt(p[0])||0,
-                        debut:p[1]||'',
-                        fin:p[2]||'',
-                        type:p[3]||'',
-                        lat:lat,
-                        lng:lng,
-                        cause:p[8]||'Non spécifiée'
-                    });
-                }
-            }catch(e){}
-        }
+    for(let i=0;i<pannesArray.length;i++){
+        const p=pannesArray[i];
+        if(!Array.isArray(p)||p.length<5)continue;
+        try{
+            const coordStr=String(p[4]);
+            const coords=JSON.parse(coordStr);
+            const lng=parseFloat(coords[0]);
+            const lat=parseFloat(coords[1]);
+            if(lat&&lng&&lat>40&&lat<65&&lng<-50&&lng>-85){
+                S.pannes.push({
+                    clients:parseInt(p[0])||0,
+                    debut:p[1]||'',
+                    fin:p[2]||'',
+                    type:p[3]||'',
+                    lat:lat,
+                    lng:lng,
+                    cause:p[8]||'Non spécifiée'
+                });
+            }
+        }catch(e){if(i<3)console.log("Parse error item",i,":",e.message);}
     }
     console.log("Pannes HQ valides:",S.pannes.length);
     if(S.pannes.length>0)console.log("Exemple:",S.pannes[0]);
