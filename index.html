@@ -7,10 +7,14 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
         * { font-family: 'Inter', sans-serif; }
         .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .animate-ping-slow { animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
         @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
         .slide-in { animation: slideIn 0.3s ease-out forwards; }
@@ -19,12 +23,25 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        
+        /* Leaflet custom styles */
+        .leaflet-container { background: #1e293b; }
+        .custom-marker { display: flex; align-items: center; justify-content: center; }
+        .marker-pin { width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+        .marker-pin.ok { background: #22c55e; }
+        .marker-pin.panne { background: #ef4444; animation: pulse 1.5s infinite; }
+        .leaflet-popup-content-wrapper { background: #1e293b; color: white; border-radius: 12px; }
+        .leaflet-popup-tip { background: #1e293b; }
+        .leaflet-popup-content { margin: 12px 16px; }
+        
+        /* Dark mode tiles */
+        .leaflet-tile-pane { filter: brightness(0.8) contrast(1.1) saturate(0.8); }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
     
     <!-- ÉCRAN DE CONNEXION -->
-    <div id="login-screen" class="fixed inset-0 flex items-center justify-center p-4">
+    <div id="login-screen" class="fixed inset-0 flex items-center justify-center p-4 z-50">
         <div class="glass p-8 rounded-3xl border border-white/10 w-full max-w-md">
             <div class="text-center mb-8">
                 <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30">
@@ -32,67 +49,161 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                 </div>
-                <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                    Hydro-Québec Monitor
-                </h1>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
                 <p class="text-slate-400 mt-2">Accès réservé - CAUCA</p>
             </div>
             
             <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Mot de passe</label>
-                    <input type="password" id="password-input" required
-                           placeholder="Entrez le mot de passe"
-                           class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors">
+                    <input type="password" id="password-input" required placeholder="Entrez le mot de passe" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
                 </div>
-                <div id="error-message" class="hidden text-red-400 text-sm text-center py-2 bg-red-500/10 rounded-lg">
-                    Mot de passe incorrect
-                </div>
+                <div id="error-message" class="hidden text-red-400 text-sm text-center py-2 bg-red-500/10 rounded-lg">Mot de passe incorrect</div>
                 <button type="submit" class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                    </svg>
-                    Accéder
+                    🔐 Accéder
                 </button>
             </form>
-            
-            <p class="text-xs text-slate-500 text-center mt-6">
-                Contactez votre administrateur pour obtenir le mot de passe
-            </p>
         </div>
     </div>
 
-    <!-- APPLICATION PRINCIPALE -->
-    <div id="app" class="hidden"></div>
+    <!-- APPLICATION -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="border-b border-white/10 glass sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl shadow-lg shadow-blue-500/20">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <div class="hidden sm:block">
+                            <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
+                            <p class="text-xs text-slate-500" id="org-name">CAUCA</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <div id="error-banner" class="hidden sm:flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 px-3 py-1.5 rounded-lg"></div>
+                        <div class="text-xs text-slate-500 hidden md:block" id="last-update">--:--</div>
+                        
+                        <button onclick="refreshData()" id="refresh-btn" class="p-2 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm transition-all flex items-center gap-2">
+                            <div class="w-2 h-2 bg-amber-400 rounded-full animate-pulse" id="status-dot"></div>
+                            <span class="hidden sm:inline" id="refresh-text">Actualiser</span>
+                        </button>
+
+                        <div class="relative group">
+                            <button class="flex items-center gap-2 p-2 hover:bg-white/10 rounded-xl">
+                                <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div>
+                            </button>
+                            <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                <div class="p-3 border-b border-white/10">
+                                    <p class="font-medium text-white" id="menu-org">CAUCA</p>
+                                    <p class="text-xs text-slate-500">Connecté</p>
+                                </div>
+                                <div class="p-2">
+                                    <button onclick="exportData()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
+                                    <label class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg cursor-pointer">📥 Importer<input type="file" accept=".json" onchange="importData(this.files[0])" class="hidden"></label>
+                                    <hr class="my-2 border-white/10">
+                                    <button onclick="logout()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg">🚪 Déconnexion</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats -->
+        <div class="bg-black/20 border-b border-white/5">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+                <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
+                    <div class="flex items-center gap-2 text-slate-400">📍 <span id="stat-total">0</span> adresses</div>
+                    <div class="flex items-center gap-2 text-green-400">✅ <span id="stat-ok">0</span> OK</div>
+                    <div class="flex items-center gap-2 text-red-400">⚡ <span id="stat-panne">0</span> en panne</div>
+                    <div class="text-slate-500 ml-auto text-xs"><span id="stat-hq">0</span> pannes au Québec</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main -->
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:py-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6" style="min-height: calc(100vh - 200px);">
+                
+                <!-- Liste -->
+                <div class="lg:col-span-1 flex flex-col glass rounded-2xl border border-white/10 overflow-hidden order-2 lg:order-1">
+                    <div class="p-3 sm:p-4 border-b border-white/10 space-y-3">
+                        <div class="relative">
+                            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="Rechercher..." class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div class="flex gap-2" id="filter-buttons">
+                            <button onclick="setFiltre('tous')" data-filter="tous" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-blue-500/20 text-blue-400 border border-blue-500/30">📍 <span class="hidden sm:inline">Tous</span></button>
+                            <button onclick="setFiltre('panne')" data-filter="panne" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-white/5 text-slate-400 hover:bg-white/10">⚡ <span class="hidden sm:inline">Panne</span></button>
+                            <button onclick="setFiltre('normal')" data-filter="normal" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 bg-white/5 text-slate-400 hover:bg-white/10">✅ <span class="hidden sm:inline">Normal</span></button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3" id="locations-list" style="max-height: 50vh;"></div>
+
+                    <div class="p-3 sm:p-4 border-t border-white/10">
+                        <button onclick="openModal()" class="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 text-blue-400 font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                            ➕ Ajouter une adresse
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Carte Leaflet -->
+                <div class="lg:col-span-2 rounded-2xl border border-white/10 overflow-hidden relative order-1 lg:order-2" style="min-height: 400px;">
+                    <div id="map" class="w-full h-full" style="min-height: 400px; height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 rounded-2xl p-5 sm:p-6 w-full max-w-md border border-white/10 shadow-2xl slide-in">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">➕ Ajouter une adresse</h2>
+                <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg text-slate-400">✕</button>
+            </div>
+            <form onsubmit="handleAddLocation(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Nom</label>
+                    <input type="text" id="input-nom" required placeholder="Ex: Bureau principal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse</label>
+                    <input type="text" id="input-adresse" required placeholder="Ex: 123 rue Example, Montréal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                </div>
+                <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all">
+                    ➕ Ajouter
+                </button>
+            </form>
+        </div>
+    </div>
 
     <script>
         // ============================================
-        // CONFIGURATION - MODIFIEZ ICI
+        // CONFIGURATION
         // ============================================
         const CONFIG = {
-            // ⚠️ CHANGEZ CE MOT DE PASSE ⚠️
-            password: "CAUCA2025!",
-            
+            password: "CAUCA2025!",  // ⚠️ CHANGEZ CE MOT DE PASSE
             orgName: "CAUCA",
-            storageKey: "hydro-quebec-monitor-cauca-v3",
-            sessionKey: "hqm-session-v3",
-            sessionDuration: 8, // heures
-            refreshInterval: 15, // minutes
+            storageKey: "hydro-quebec-monitor-v4",
+            sessionKey: "hqm-session-v4",
+            sessionDuration: 8,
+            refreshInterval: 15,
             seuilDistanceKm: 2.0,
-            
-            // URL de l'API Hydro-Québec
             hqApiBase: "https://pannes.hydroquebec.com/pannes/donnees/v3_0",
-            
-            // Proxies CORS (on essaie plusieurs au cas où l'un ne fonctionne pas)
             corsProxies: [
                 "https://corsproxy.io/?",
-                "https://api.allorigins.win/raw?url=",
-                "https://cors-anywhere.herokuapp.com/"
+                "https://api.allorigins.win/raw?url="
             ]
         };
 
         // ============================================
-        // ÉTAT GLOBAL
+        // ÉTAT
         // ============================================
         let state = {
             locations: [],
@@ -100,15 +211,17 @@
             selectedId: null,
             filtreStatut: 'tous',
             recherche: '',
-            showModal: false,
             isLoading: false,
             lastUpdate: null,
             error: null,
             proxyIndex: 0
         };
 
+        let map = null;
+        let markers = {};
+
         // ============================================
-        // AUTHENTIFICATION
+        // AUTH
         // ============================================
         function checkSession() {
             try {
@@ -130,18 +243,15 @@
         function handleLogin(e) {
             e.preventDefault();
             const password = document.getElementById('password-input').value;
-            const errorDiv = document.getElementById('error-message');
-            const form = document.getElementById('login-form');
-            
             if (password === CONFIG.password) {
                 createSession();
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app').classList.remove('hidden');
                 initApp();
             } else {
-                errorDiv.classList.remove('hidden');
-                form.classList.add('shake');
-                setTimeout(() => form.classList.remove('shake'), 300);
+                document.getElementById('error-message').classList.remove('hidden');
+                document.getElementById('login-form').classList.add('shake');
+                setTimeout(() => document.getElementById('login-form').classList.remove('shake'), 300);
                 document.getElementById('password-input').value = '';
             }
         }
@@ -152,83 +262,62 @@
         }
 
         // ============================================
-        // STOCKAGE LOCAL
+        // STOCKAGE
         // ============================================
         function loadSavedData() {
             try {
                 const saved = localStorage.getItem(CONFIG.storageKey);
                 if (saved) state.locations = JSON.parse(saved).locations || [];
-            } catch (e) { console.error("Erreur chargement:", e); }
+            } catch (e) {}
         }
 
         function saveData() {
-            try {
-                localStorage.setItem(CONFIG.storageKey, JSON.stringify({ locations: state.locations, lastSaved: new Date().toISOString() }));
-            } catch (e) { console.error("Erreur sauvegarde:", e); }
+            localStorage.setItem(CONFIG.storageKey, JSON.stringify({ locations: state.locations }));
         }
 
         // ============================================
-        // API HYDRO-QUÉBEC AVEC PROXY CORS
+        // API HYDRO-QUÉBEC
         // ============================================
         async function fetchWithCorsProxy(url) {
-            // Essayer d'abord sans proxy (au cas où CORS serait activé)
             try {
                 const directRes = await fetch(url, { mode: 'cors' });
                 if (directRes.ok) return await directRes.text();
-            } catch (e) {
-                console.log("Direct fetch failed, trying proxies...");
-            }
+            } catch (e) {}
 
-            // Essayer les proxies CORS
             for (let i = 0; i < CONFIG.corsProxies.length; i++) {
                 const proxyUrl = CONFIG.corsProxies[(state.proxyIndex + i) % CONFIG.corsProxies.length];
                 try {
-                    console.log(`Trying proxy: ${proxyUrl}`);
-                    const res = await fetch(proxyUrl + encodeURIComponent(url), {
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                    });
+                    const res = await fetch(proxyUrl + encodeURIComponent(url));
                     if (res.ok) {
                         state.proxyIndex = (state.proxyIndex + i) % CONFIG.corsProxies.length;
                         return await res.text();
                     }
-                } catch (e) {
-                    console.log(`Proxy ${proxyUrl} failed:`, e.message);
-                }
+                } catch (e) {}
             }
-            throw new Error("Tous les proxies ont échoué");
+            throw new Error("API indisponible");
         }
 
         async function fetchPannesHQ() {
             state.isLoading = true;
             state.error = null;
-            render();
+            updateUI();
 
             try {
-                // Étape 1: Obtenir la version
-                const versionUrl = `${CONFIG.hqApiBase}/bisversion.json`;
-                const versionText = await fetchWithCorsProxy(versionUrl);
+                const versionText = await fetchWithCorsProxy(`${CONFIG.hqApiBase}/bisversion.json`);
                 const version = versionText.replace(/"/g, '').trim();
-                console.log("Version HQ:", version);
 
-                // Étape 2: Obtenir les pannes
-                const markersUrl = `${CONFIG.hqApiBase}/bismarkers${version}.json`;
-                const markersText = await fetchWithCorsProxy(markersUrl);
+                const markersText = await fetchWithCorsProxy(`${CONFIG.hqApiBase}/bismarkers${version}.json`);
                 const markersData = JSON.parse(markersText);
 
                 state.pannesHQ = Array.isArray(markersData) ? markersData : (markersData.markers || []);
                 state.lastUpdate = new Date();
-                console.log(`${state.pannesHQ.length} pannes chargées`);
 
                 updateLocationsStatus();
-                return true;
-
             } catch (e) {
-                console.error("Erreur API HQ:", e);
-                state.error = "Impossible de charger les données HQ";
-                return false;
+                state.error = "Impossible de charger les données";
             } finally {
                 state.isLoading = false;
-                render();
+                updateUI();
             }
         }
 
@@ -242,9 +331,7 @@
 
         function updateLocationsStatus() {
             state.locations = state.locations.map(loc => {
-                let enPanne = false;
-                let panneInfo = null;
-                let distanceMin = Infinity;
+                let enPanne = false, panneInfo = null, distanceMin = Infinity;
 
                 for (const panne of state.pannesHQ) {
                     const panneLat = parseFloat(panne.lat || panne.latitude || 0);
@@ -258,283 +345,210 @@
                             enPanne = true;
                             panneInfo = {
                                 cause: panne.cause || panne.causeLib || 'Non spécifiée',
-                                debut: panne.dateDebut || panne.debut || 'Inconnue',
-                                retablissement: panne.dateRetablissementPrevue || panne.eta || null,
-                                clientsAffectes: parseInt(panne.nbClient || panne.clients || 0),
-                                distance: distance.toFixed(2)
+                                debut: panne.dateDebut || 'Inconnue',
+                                retablissement: panne.dateRetablissementPrevue || null,
+                                clientsAffectes: parseInt(panne.nbClient || 0)
                             };
                         }
                     }
                 }
 
-                return { ...loc, enPanne, panne: panneInfo, distancePanneProche: distanceMin === Infinity ? null : distanceMin.toFixed(2) };
+                return { ...loc, enPanne, panne: panneInfo, distancePanneProche: distanceMin === Infinity ? null : distanceMin.toFixed(1) };
             });
             saveData();
+            updateUI();
+            updateMapMarkers();
         }
 
         async function geocodeAddress(adresse) {
             const query = encodeURIComponent(`${adresse}, Québec, Canada`);
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=ca`, {
-                headers: { 'User-Agent': 'HydroQuebecMonitor/1.0' }
-            });
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=ca`);
             const data = await res.json();
-            if (data && data.length > 0) {
-                return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-            }
+            if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
             throw new Error("Adresse non trouvée");
         }
 
         // ============================================
-        // EXPORT / IMPORT
+        // CARTE LEAFLET
         // ============================================
-        function exportData() {
-            const data = { exportDate: new Date().toISOString(), organization: CONFIG.orgName, locations: state.locations.map(l => ({ nom: l.nom, adresse: l.adresse, lat: l.lat, lng: l.lng })) };
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `hydro-monitor-export-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
+        function initMap() {
+            map = L.map('map', {
+                center: [46.8, -71.2],
+                zoom: 7,
+                zoomControl: true
+            });
+
+            // Tuiles CartoDB Dark (thème sombre)
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Forcer un resize après init
+            setTimeout(() => map.invalidateSize(), 100);
         }
 
-        function importData(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.locations) {
-                        const newLocs = data.locations.map((l, i) => ({ id: Date.now() + i, nom: l.nom, adresse: l.adresse, lat: l.lat, lng: l.lng, enPanne: false, panne: null }));
-                        state.locations = [...state.locations, ...newLocs];
-                        updateLocationsStatus();
-                        render();
-                        alert(`${newLocs.length} adresse(s) importée(s)!`);
-                    }
-                } catch (err) { alert("Erreur: " + err.message); }
-            };
-            reader.readAsText(file);
+        function updateMapMarkers() {
+            // Supprimer les anciens marqueurs
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            markers = {};
+
+            const filtered = getFilteredLocations();
+            const bounds = [];
+
+            filtered.forEach(loc => {
+                const icon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div class="marker-pin ${loc.enPanne ? 'panne' : 'ok'}"></div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                const marker = L.marker([loc.lat, loc.lng], { icon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <div style="min-width: 180px;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${loc.nom}</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">${loc.adresse}</div>
+                            <div style="display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; ${loc.enPanne ? 'background: #ef4444; color: white;' : 'background: #22c55e; color: white;'}">
+                                ${loc.enPanne ? '⚡ EN PANNE' : '✓ Normal'}
+                            </div>
+                            ${loc.enPanne && loc.panne ? `
+                                <div style="margin-top: 8px; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px; font-size: 11px;">
+                                    <div style="color: #f87171;">${loc.panne.cause}</div>
+                                    <div style="color: #94a3b8;">${loc.panne.clientsAffectes} clients affectés</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `);
+
+                marker.on('click', () => selectLocation(loc.id));
+                markers[loc.id] = marker;
+                bounds.push([loc.lat, loc.lng]);
+            });
+
+            // Ajuster la vue si des marqueurs existent
+            if (bounds.length > 0) {
+                if (bounds.length === 1) {
+                    map.setView(bounds[0], 12);
+                } else {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+            }
         }
 
         // ============================================
-        // RENDU UI
+        // UI
         // ============================================
-        function render() {
-            const app = document.getElementById('app');
-            
-            const filteredLocations = state.locations.filter(loc => {
+        function getFilteredLocations() {
+            return state.locations.filter(loc => {
                 const matchRecherche = loc.nom.toLowerCase().includes(state.recherche.toLowerCase()) || loc.adresse.toLowerCase().includes(state.recherche.toLowerCase());
                 const matchStatut = state.filtreStatut === 'tous' || (state.filtreStatut === 'panne' && loc.enPanne) || (state.filtreStatut === 'normal' && !loc.enPanne);
                 return matchRecherche && matchStatut;
             });
-
-            const stats = { total: state.locations.length, enPanne: state.locations.filter(l => l.enPanne).length, normal: state.locations.filter(l => !l.enPanne).length };
-
-            app.innerHTML = `
-                <!-- Header -->
-                <header class="border-b border-white/10 glass sticky top-0 z-40">
-                    <div class="max-w-7xl mx-auto px-4 py-3">
-                        <div class="flex items-center justify-between gap-4">
-                            <div class="flex items-center gap-3">
-                                <div class="p-2 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl shadow-lg shadow-blue-500/20">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                                </div>
-                                <div class="hidden sm:block">
-                                    <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">Hydro-Québec Monitor</h1>
-                                    <p class="text-xs text-slate-500">${CONFIG.orgName}</p>
-                                </div>
-                            </div>
-
-                            <div class="flex items-center gap-2 sm:gap-3">
-                                ${state.error ? `<div class="hidden sm:flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 px-3 py-1.5 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"/></svg>${state.error}</div>` : ''}
-                                
-                                <div class="text-xs text-slate-500 hidden md:block">${state.lastUpdate ? state.lastUpdate.toLocaleTimeString('fr-CA') : '--:--'}</div>
-                                
-                                <button onclick="refreshData()" class="p-2 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm transition-all flex items-center gap-2 ${state.isLoading ? 'opacity-50' : ''}" ${state.isLoading ? 'disabled' : ''}>
-                                    <div class="w-2 h-2 ${state.lastUpdate && !state.error ? 'bg-green-400' : 'bg-amber-400'} rounded-full ${state.isLoading ? 'animate-ping' : 'animate-pulse'}"></div>
-                                    <span class="hidden sm:inline">${state.isLoading ? 'Chargement...' : 'Actualiser'}</span>
-                                </button>
-
-                                <!-- Menu -->
-                                <div class="relative group">
-                                    <button class="flex items-center gap-2 p-2 hover:bg-white/10 rounded-xl transition-colors">
-                                        <div class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold">C</div>
-                                    </button>
-                                    <div class="absolute right-0 top-full mt-2 w-56 glass rounded-xl border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                                        <div class="p-3 border-b border-white/10">
-                                            <p class="font-medium text-white">${CONFIG.orgName}</p>
-                                            <p class="text-xs text-slate-500">Connecté</p>
-                                        </div>
-                                        <div class="p-2">
-                                            <button onclick="exportData()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg">📤 Exporter</button>
-                                            <label class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 rounded-lg cursor-pointer">📥 Importer<input type="file" accept=".json" onchange="importData(this.files[0])" class="hidden"></label>
-                                            <hr class="my-2 border-white/10">
-                                            <button onclick="logout()" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg">🚪 Déconnexion</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                <!-- Stats -->
-                <div class="bg-black/20 border-b border-white/5">
-                    <div class="max-w-7xl mx-auto px-4 py-3">
-                        <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-sm">
-                            <div class="flex items-center gap-2 text-slate-400">📍 ${stats.total} adresses</div>
-                            <div class="flex items-center gap-2 text-green-400">✅ ${stats.normal} OK</div>
-                            <div class="flex items-center gap-2 text-red-400">⚡ ${stats.enPanne} en panne</div>
-                            ${state.pannesHQ.length > 0 ? `<div class="text-slate-500 ml-auto text-xs">${state.pannesHQ.length} pannes au Québec</div>` : ''}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Main -->
-                <div class="max-w-7xl mx-auto px-4 py-4 sm:py-6">
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6" style="min-height: calc(100vh - 200px);">
-                        
-                        <!-- Liste -->
-                        <div class="lg:col-span-1 flex flex-col glass rounded-2xl border border-white/10 overflow-hidden order-2 lg:order-1">
-                            <div class="p-3 sm:p-4 border-b border-white/10 space-y-3">
-                                <div class="relative">
-                                    <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                                    <input type="text" value="${state.recherche}" oninput="updateRecherche(this.value)" placeholder="Rechercher..." class="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
-                                </div>
-                                <div class="flex gap-2">
-                                    ${['tous', 'panne', 'normal'].map(f => `
-                                        <button onclick="setFiltre('${f}')" class="flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${state.filtreStatut === f ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}">
-                                            ${f === 'tous' ? '📍' : f === 'panne' ? '⚡' : '✅'}
-                                            <span class="hidden sm:inline">${f === 'tous' ? 'Tous' : f === 'panne' ? 'Panne' : 'Normal'}</span>
-                                        </button>
-                                    `).join('')}
-                                </div>
-                            </div>
-
-                            <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3" style="max-height: 50vh;">
-                                ${filteredLocations.length === 0 ? `
-                                    <div class="text-center py-8 text-slate-500">
-                                        <div class="text-4xl mb-3">📍</div>
-                                        <p>${state.locations.length === 0 ? 'Ajoutez votre première adresse' : 'Aucun résultat'}</p>
-                                    </div>
-                                ` : filteredLocations.map(loc => renderLocationCard(loc)).join('')}
-                            </div>
-
-                            <div class="p-3 sm:p-4 border-t border-white/10">
-                                <button onclick="openModal()" class="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 text-blue-400 font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                                    ➕ Ajouter une adresse
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Carte -->
-                        <div class="lg:col-span-2 glass rounded-2xl border border-white/10 overflow-hidden relative order-1 lg:order-2" style="min-height: 300px; height: 40vh;">
-                            ${renderMap(filteredLocations)}
-                        </div>
-                    </div>
-                </div>
-
-                ${state.showModal ? renderModal() : ''}
-            `;
         }
 
-        function renderLocationCard(loc) {
-            const isSelected = state.selectedId === loc.id;
-            return `
-                <div onclick="selectLocation(${loc.id})" class="relative p-3 sm:p-4 rounded-xl cursor-pointer transition-all duration-200 group ${isSelected ? 'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400' : 'bg-white/5 border border-white/10 hover:bg-white/10'} ${loc.enPanne ? 'ring-2 ring-red-500/50' : ''}">
-                    <div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${loc.enPanne ? 'bg-red-500 text-white animate-pulse-slow' : 'bg-green-500/80 text-white'}">
-                        ${loc.enPanne ? '⚡ PANNE' : '✓ OK'}
-                    </div>
+        function updateUI() {
+            // Stats
+            document.getElementById('stat-total').textContent = state.locations.length;
+            document.getElementById('stat-ok').textContent = state.locations.filter(l => !l.enPanne).length;
+            document.getElementById('stat-panne').textContent = state.locations.filter(l => l.enPanne).length;
+            document.getElementById('stat-hq').textContent = state.pannesHQ.length;
+
+            // Status
+            document.getElementById('last-update').textContent = state.lastUpdate ? state.lastUpdate.toLocaleTimeString('fr-CA') : '--:--';
+            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${state.isLoading ? 'bg-amber-400 animate-ping' : (state.lastUpdate && !state.error ? 'bg-green-400 animate-pulse' : 'bg-amber-400 animate-pulse')}`;
+            document.getElementById('refresh-text').textContent = state.isLoading ? 'Chargement...' : 'Actualiser';
+            document.getElementById('refresh-btn').disabled = state.isLoading;
+
+            // Error
+            const errorBanner = document.getElementById('error-banner');
+            if (state.error) {
+                errorBanner.classList.remove('hidden');
+                errorBanner.textContent = state.error;
+            } else {
+                errorBanner.classList.add('hidden');
+            }
+
+            // Liste
+            renderLocationsList();
+        }
+
+        function renderLocationsList() {
+            const list = document.getElementById('locations-list');
+            const filtered = getFilteredLocations();
+
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="text-center py-8 text-slate-500"><div class="text-4xl mb-3">📍</div><p>${state.locations.length === 0 ? 'Ajoutez votre première adresse' : 'Aucun résultat'}</p></div>`;
+                return;
+            }
+
+            list.innerHTML = filtered.map(loc => `
+                <div onclick="selectLocation(${loc.id})" class="relative p-3 sm:p-4 rounded-xl cursor-pointer transition-all duration-200 group ${state.selectedId === loc.id ? 'bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-2 border-blue-400' : 'bg-white/5 border border-white/10 hover:bg-white/10'} ${loc.enPanne ? 'ring-2 ring-red-500/50' : ''}">
+                    <div class="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-bold ${loc.enPanne ? 'bg-red-500 text-white animate-pulse-slow' : 'bg-green-500/80 text-white'}">${loc.enPanne ? '⚡ PANNE' : '✓ OK'}</div>
                     <div class="flex items-start gap-3">
-                        <div class="p-2 rounded-lg shrink-0 ${loc.enPanne ? 'bg-red-500/20' : 'bg-green-500/20'}">
-                            <span class="text-lg">${loc.enPanne ? '🔴' : '🟢'}</span>
-                        </div>
+                        <div class="text-lg">${loc.enPanne ? '🔴' : '🟢'}</div>
                         <div class="flex-1 min-w-0">
-                            <h3 class="font-semibold text-white truncate text-sm sm:text-base">${loc.nom}</h3>
-                            <p class="text-xs sm:text-sm text-slate-400 truncate">${loc.adresse}</p>
-                            ${loc.enPanne && loc.panne ? `
-                                <div class="mt-2 p-2 bg-red-500/10 rounded-lg border border-red-500/20 text-xs">
-                                    <div class="text-red-400 font-medium">⚠️ ${loc.panne.cause}</div>
-                                    <div class="text-slate-400">${loc.panne.clientsAffectes} clients</div>
-                                    ${loc.panne.retablissement ? `<div class="text-amber-400 mt-1">⏱ ${loc.panne.retablissement}</div>` : ''}
-                                </div>
-                            ` : loc.distancePanneProche ? `<div class="mt-1 text-xs text-slate-500">Panne la plus proche: ${loc.distancePanneProche} km</div>` : ''}
+                            <h3 class="font-semibold text-white truncate text-sm">${loc.nom}</h3>
+                            <p class="text-xs text-slate-400 truncate">${loc.adresse}</p>
+                            ${loc.enPanne && loc.panne ? `<div class="mt-2 p-2 bg-red-500/10 rounded-lg text-xs"><div class="text-red-400 font-medium">⚠️ ${loc.panne.cause}</div><div class="text-slate-400">${loc.panne.clientsAffectes} clients</div></div>` : (loc.distancePanneProche ? `<div class="mt-1 text-xs text-slate-500">Panne la plus proche: ${loc.distancePanneProche} km</div>` : '')}
                         </div>
                     </div>
-                    <button onclick="event.stopPropagation(); deleteLocation(${loc.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100 text-red-400">🗑️</button>
+                    <button onclick="event.stopPropagation(); deleteLocation(${loc.id})" class="absolute bottom-2 right-2 p-1.5 hover:bg-red-500/20 rounded-lg opacity-0 group-hover:opacity-100 text-red-400">🗑️</button>
                 </div>
-            `;
-        }
-
-        function renderMap(locations) {
-            const bounds = { minLat: 45.0, maxLat: 48.5, minLng: -79.5, maxLng: -64.0 };
-            const toPixel = (lat, lng) => ({
-                x: ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100,
-                y: ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100
-            });
-
-            return `
-                <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid meet">
-                    <defs><pattern id="grid" width="8%" height="10%" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(96,165,250,0.08)" stroke-width="0.5"/></pattern></defs>
-                    <rect width="100%" height="100%" fill="url(#grid)"/>
-                    <path d="M 15% 85% Q 25% 70% 30% 55% Q 40% 40% 50% 30% Q 60% 25% 75% 28% Q 85% 35% 88% 50% Q 85% 65% 75% 75% Q 60% 85% 45% 82% Q 30% 80% 15% 85% Z" fill="rgba(59,130,246,0.06)" stroke="rgba(59,130,246,0.2)" stroke-width="1.5"/>
-                    ${locations.map(loc => {
-                        const pos = toPixel(loc.lat, loc.lng);
-                        const isSelected = state.selectedId === loc.id;
-                        return `
-                            <g onclick="selectLocation(${loc.id})" class="cursor-pointer">
-                                ${loc.enPanne ? `<circle cx="${pos.x}%" cy="${pos.y}%" r="18" fill="none" stroke="#ef4444" stroke-width="1.5" opacity="0.4" class="animate-ping-slow"/><circle cx="${pos.x}%" cy="${pos.y}%" r="12" fill="rgba(239,68,68,0.15)"/>` : ''}
-                                <circle cx="${pos.x}%" cy="${pos.y}%" r="${isSelected ? 10 : 7}" fill="${loc.enPanne ? '#ef4444' : '#22c55e'}" stroke="${isSelected ? '#fff' : 'rgba(255,255,255,0.4)'}" stroke-width="${isSelected ? 2.5 : 1.5}"/>
-                                ${isSelected ? `<rect x="${pos.x - 10}%" y="${pos.y - 9}%" width="20%" height="5%" rx="4" fill="rgba(0,0,0,0.85)"/><text x="${pos.x}%" y="${pos.y - 5.5}%" text-anchor="middle" font-size="10" fill="white">${loc.nom.substring(0, 22)}</text>` : ''}
-                            </g>
-                        `;
-                    }).join('')}
-                </svg>
-                <div class="absolute bottom-3 left-3 glass rounded-lg p-2.5 text-xs border border-white/10">
-                    <div class="flex items-center gap-2 mb-1.5"><div class="w-2.5 h-2.5 rounded-full bg-green-500"></div><span class="text-green-400">Normal</span></div>
-                    <div class="flex items-center gap-2"><div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div><span class="text-red-400">En panne</span></div>
-                </div>
-            `;
-        }
-
-        function renderModal() {
-            return `
-                <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="closeModal()">
-                    <div class="bg-slate-800 rounded-2xl p-5 sm:p-6 w-full max-w-md border border-white/10 shadow-2xl slide-in" onclick="event.stopPropagation()">
-                        <div class="flex items-center justify-between mb-5">
-                            <h2 class="text-lg font-bold text-white">➕ Ajouter une adresse</h2>
-                            <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg text-slate-400">✕</button>
-                        </div>
-                        <form onsubmit="handleAddLocation(event)" class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-slate-300 mb-1.5">Nom</label>
-                                <input type="text" id="input-nom" required placeholder="Ex: Bureau principal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-300 mb-1.5">Adresse</label>
-                                <input type="text" id="input-adresse" required placeholder="Ex: 123 rue Example, Montréal" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
-                            </div>
-                            <button type="submit" id="btn-submit" class="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all">
-                                ➕ Ajouter
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            `;
+            `).join('');
         }
 
         // ============================================
         // ACTIONS
         // ============================================
-        function selectLocation(id) { state.selectedId = state.selectedId === id ? null : id; render(); }
-        function setFiltre(f) { state.filtreStatut = f; render(); }
-        function updateRecherche(v) { state.recherche = v; render(); }
-        function openModal() { state.showModal = true; render(); }
-        function closeModal() { state.showModal = false; render(); }
+        function selectLocation(id) {
+            state.selectedId = state.selectedId === id ? null : id;
+            updateUI();
+
+            if (state.selectedId && markers[id]) {
+                const loc = state.locations.find(l => l.id === id);
+                map.setView([loc.lat, loc.lng], 14);
+                markers[id].openPopup();
+            }
+        }
+
+        function setFiltre(f) {
+            state.filtreStatut = f;
+            document.querySelectorAll('#filter-buttons button').forEach(btn => {
+                const isActive = btn.dataset.filter === f;
+                btn.className = `flex-1 px-2 sm:px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${isActive ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`;
+            });
+            updateUI();
+            updateMapMarkers();
+        }
+
+        function handleSearch(v) {
+            state.recherche = v;
+            updateUI();
+            updateMapMarkers();
+        }
+
+        function openModal() {
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('modal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('modal').classList.remove('flex');
+            document.getElementById('input-nom').value = '';
+            document.getElementById('input-adresse').value = '';
+        }
 
         function deleteLocation(id) {
             if (confirm('Supprimer cette adresse?')) {
                 state.locations = state.locations.filter(l => l.id !== id);
                 if (state.selectedId === id) state.selectedId = null;
                 saveData();
-                render();
+                updateUI();
+                updateMapMarkers();
             }
         }
 
@@ -554,6 +568,7 @@
                 closeModal();
             } catch (err) {
                 alert("Erreur: " + err.message);
+            } finally {
                 btn.disabled = false;
                 btn.textContent = '➕ Ajouter';
             }
@@ -564,17 +579,52 @@
             await fetchPannesHQ();
         }
 
+        function exportData() {
+            const data = { exportDate: new Date().toISOString(), locations: state.locations.map(l => ({ nom: l.nom, adresse: l.adresse, lat: l.lat, lng: l.lng })) };
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+            a.download = `hydro-monitor-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        function importData(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.locations) {
+                        const newLocs = data.locations.map((l, i) => ({ id: Date.now() + i, ...l, enPanne: false, panne: null }));
+                        state.locations = [...state.locations, ...newLocs];
+                        updateLocationsStatus();
+                        alert(`${newLocs.length} adresse(s) importée(s)!`);
+                    }
+                } catch (err) { alert("Erreur: " + err.message); }
+            };
+            reader.readAsText(file);
+        }
+
         // ============================================
-        // INITIALISATION
+        // INIT
         // ============================================
         async function initApp() {
+            document.getElementById('org-name').textContent = CONFIG.orgName;
+            document.getElementById('menu-org').textContent = CONFIG.orgName;
+            
             loadSavedData();
-            render();
+            initMap();
+            updateUI();
+            updateMapMarkers();
             await refreshData();
+            
             setInterval(refreshData, CONFIG.refreshInterval * 60 * 1000);
         }
 
-        // Vérifier la session au chargement
+        // Fermer modal sur click extérieur
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') closeModal();
+        });
+
+        // Vérifier session
         if (checkSession()) {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
