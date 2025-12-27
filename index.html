@@ -218,14 +218,16 @@ async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
     
     // Format HQ: [nbClients, dateDebut, dateFin, type, "[lng,lat]", statut, code, id, cause, ""]
     // type: "P" = Panne, "I" = Interruption planifiée
-    // statut: A=Assignée, L=Localisée, R=Réparation, N=Non confirmée (tous = pannes actives)
+    // statut: A=Assignée, R=Réparation, N=Non confirmée = actives | L=terminée
     S.pannes=[];
     for(let i=0;i<pannesArray.length;i++){
         const p=pannesArray[i];
         if(!Array.isArray(p)||p.length<6)continue;
         const type=p[3];
-        // Ne garder que les vraies pannes (pas les interruptions planifiées)
+        const statut=p[5];
+        // Ne garder que les vraies pannes actives (pas L=terminées)
         if(type!=='P')continue;
+        if(statut==='L')continue;
         try{
             const coordStr=String(p[4]);
             const coords=JSON.parse(coordStr);
@@ -237,7 +239,7 @@ async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
                     debut:p[1]||'',
                     fin:p[2]||'',
                     type:type,
-                    statut:p[5]||'',
+                    statut:statut,
                     lat:lat,
                     lng:lng,
                     cause:p[8]||'Non spécifiée'
