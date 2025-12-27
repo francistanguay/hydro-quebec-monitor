@@ -155,7 +155,6 @@ const CFG=(typeof CONFIG!=='undefined')?{...DEF,...CONFIG}:DEF;
 const INIT_ADDR=(typeof ADRESSES_PREDEFINIES!=='undefined')?ADRESSES_PREDEFINIES:[];
 const STORE_KEY="hqm-v9",SESS_KEY="hqm-s9";
 const HQ_API="https://pannes.hydroquebec.com/pannes/donnees/v3_0";
-const PROXIES=["https://corsproxy.io/?","https://api.allorigins.win/raw?url="];
 const NOM_API="https://nominatim.openstreetmap.org";
 
 let S={locs:[],pannes:[],selId:null,filter:'tous',search:'',loading:false,lastUp:null,err:null,showZones:true,selSugg:null};
@@ -172,12 +171,76 @@ function load(){try{const s=localStorage.getItem(STORE_KEY);if(s)S.locs=JSON.par
 function save(){localStorage.setItem(STORE_KEY,JSON.stringify({locs:S.locs}));}
 function resetConfig(){if(confirm("Charger config.js?")){S.locs=INIT_ADDR.map((a,i)=>({id:Date.now()+i,nom:a.nom,adresse:a.adresse,lat:a.lat,lng:a.lng,enPanne:false,panne:null}));save();updateStatus();}}
 
-// API
-async function fetchP(url){try{const r=await fetch(url);if(r.ok)return await r.text();}catch(e){console.log("Direct fetch failed:",e.message);}for(const p of PROXIES){try{console.log("Trying proxy:",p);const r=await fetch(p+encodeURIComponent(url));if(r.ok){console.log("Proxy success:",p);return await r.text();}}catch(e){console.log("Proxy failed:",p,e.message);}}throw new Error("API erreur");}
-async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{const versionUrl=`${HQ_API}/bisversion.json`;console.log("Fetching version:",versionUrl);const v=(await fetchP(versionUrl)).replace(/"/g,'').trim();console.log("Version:",v);const markersUrl=`${HQ_API}/bismarkers${v}.json`;console.log("Fetching markers:",markersUrl);const rawText=await fetchP(markersUrl);console.log("Raw response length:",rawText.length);const raw=JSON.parse(rawText);console.log("Parsed data type:",typeof raw,"isArray:",Array.isArray(raw),"length:",raw?.length);if(raw?.length>0)console.log("First item sample:",JSON.stringify(raw[0]).substring(0,200));
-// Format HQ: [nbClients, dateDebut, dateFin, type, "[lng,lat]", statut, code, id, cause, ""]
-S.pannes=(Array.isArray(raw)?raw:[]).map((p,i)=>{if(!Array.isArray(p)){if(i<3)console.log("Item not array:",typeof p,p);return null;}if(p.length<5){if(i<3)console.log("Item too short:",p.length);return null;}try{const coordStr=p[4];if(i<3)console.log("Coord string:",coordStr);const coords=JSON.parse(coordStr);if(i<3)console.log("Parsed coords:",coords);return{clients:parseInt(p[0])||0,debut:p[1],fin:p[2],type:p[3],lng:parseFloat(coords[0]),lat:parseFloat(coords[1]),statut:p[5],code:p[6],id:p[7],cause:p[8]||'Non spécifiée'};}catch(e){console.log("Parse error for item",i,":",e.message,p[4]);return null;}}).filter(p=>p&&p.lat&&p.lng);
-console.log("Pannes HQ valides:",S.pannes.length);if(S.pannes.length>0)console.log("First panne:",S.pannes[0]);S.lastUp=new Date();updateStatus();updateZones();}catch(e){console.error("Erreur API HQ:",e);S.err="Données HQ indisponibles";}S.loading=false;updateUI();}
+// API - CORS Proxies (on force leur utilisation car HQ bloque CORS)
+const PROXIES=[
+    url=>`https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url=>`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url=>`https://crossorigin.me/${url}`
+];
+async function fetchP(url){
+    // Toujours utiliser un proxy car HQ n'a pas CORS
+    for(const makeProxy of PROXIES){
+        try{
+            const proxyUrl=makeProxy(url);
+            console.log("Trying:",proxyUrl.substring(0,60)+"...");
+            const r=await fetch(proxyUrl);
+            if(r.ok){
+                const text=await r.text();
+                if(text && text.length>0 && !text.includes('error')){
+                    console.log("Success! Got",text.length,"chars");
+                    return text;
+                }
+            }
+        }catch(e){console.log("Proxy failed:",e.message);}
+    }
+    throw new Error("Tous les proxies ont échoué");
+}
+async function fetchHQ(){S.loading=true;S.err=null;updateUI();try{
+    console.log("=== Fetching HQ Data ===");
+    const versionUrl=`${HQ_API}/bisversion.json`;
+    const vText=await fetchP(versionUrl);
+    const v=vText.replace(/["\s]/g,'');
+    console.log("Version:",v);
+    
+    const markersUrl=`${HQ_API}/bismarkers${v}.json`;
+    const rawText=await fetchP(markersUrl);
+    console.log("Markers response length:",rawText.length);
+    
+    const raw=JSON.parse(rawText);
+    console.log("Parsed: isArray=",Array.isArray(raw),"length=",raw?.length);
+    
+    // Format HQ: [nbClients, dateDebut, dateFin, type, "[lng,lat]", statut, code, id, cause, ""]
+    S.pannes=[];
+    if(Array.isArray(raw)){
+        for(let i=0;i<raw.length;i++){
+            const p=raw[i];
+            if(!Array.isArray(p)||p.length<5)continue;
+            try{
+                const coordStr=String(p[4]);
+                const coords=JSON.parse(coordStr);
+                const lng=parseFloat(coords[0]);
+                const lat=parseFloat(coords[1]);
+                if(lat&&lng&&lat>40&&lat<65&&lng<-50&&lng>-85){
+                    S.pannes.push({
+                        clients:parseInt(p[0])||0,
+                        debut:p[1]||'',
+                        fin:p[2]||'',
+                        type:p[3]||'',
+                        lat:lat,
+                        lng:lng,
+                        cause:p[8]||'Non spécifiée'
+                    });
+                }
+            }catch(e){}
+        }
+    }
+    console.log("Pannes HQ valides:",S.pannes.length);
+    if(S.pannes.length>0)console.log("Exemple:",S.pannes[0]);
+    S.lastUp=new Date();
+    updateStatus();
+    updateZones();
+}catch(e){console.error("Erreur API HQ:",e);S.err="Données HQ: "+e.message;}S.loading=false;updateUI();}
 function dist(lat1,lon1,lat2,lon2){const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function updateStatus(){S.locs=S.locs.map(loc=>{let enPanne=false,info=null,dMin=Infinity;for(const p of S.pannes){if(!p.lat||!p.lng)continue;const d=dist(loc.lat,loc.lng,p.lat,p.lng);if(d<dMin){dMin=d;if(d<=CFG.seuilDistanceKm){enPanne=true;info={cause:p.cause||'Non spécifiée',clients:p.clients||0};}}}return{...loc,enPanne,panne:info,distP:dMin===Infinity?null:dMin.toFixed(1)};});save();updateUI();updateMarkers();}
 
